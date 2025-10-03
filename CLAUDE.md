@@ -15,9 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-- TypeScript Remix / React Router with Bun as the underlying server.
+- TypeScript Remix / React Router with Bun as the underlying server
 - PostgreSQL database hosted on Neon
-- Prisma ORM for database interactions/migration/management
+- Drizzle ORM for database interactions/migration/management
+- Firebase Authentication for user management
+- Plaid API integration for bank account and transaction data
 
 ## Environment Configuration
 
@@ -29,21 +31,36 @@ The project uses environment variables for configuration:
 
 ## Development Setup
 
-The project currently needs initial scaffolding. Based on the developer's patterns from other projects, typical setup would include:
-
 ```bash
-# Initialize the project (when package.json exists)
-npm install
+# Install dependencies
+bun install
 
-# Start development server (typical pattern)
-npm run dev
+# Start development server (runs on port 4004)
+bun run dev
 
-# Build for production (typical pattern)
-npm run build
+# Build for production
+bun run build
 
-# Run linting (typical pattern)
-npm run lint
+# Start production server
+bun run start
+
+# Type checking
+bun run typecheck
+
+# Database management
+bun run db:generate    # Generate migrations from schema
+bun run db:push        # Push schema directly to database
+bun run db:studio      # Open Drizzle Studio GUI
 ```
+
+## Database Schema
+
+### Tables:
+- **users**: Links Firebase UID to database records
+- **accounts**: Connected bank accounts from Plaid
+- **transactions**: Transaction data from Plaid with categorization
+- **categories**: Budget categories for spending tracking
+- **plaidWebhooks**: Webhook events from Plaid
 
 ## Important Notes
 
