@@ -1,15 +1,10 @@
 import { db, categoryMatchings, anonymizedMerchants, categories, transactions } from '~/db';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export interface TransactionData {
@@ -116,15 +111,16 @@ export class CategorizationService {
 
       // Find similar merchants using vector similarity
       // Note: Using SQL template for pgvector cosine similarity
+      const embeddingStr = `[${embedding.join(',')}]`;
       const similar = await db.execute(sql`
         SELECT
           merchant_hash,
           category_name,
           confidence,
           usage_count,
-          1 - (embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
+          1 - (embedding <=> ${embeddingStr}::vector) as similarity
         FROM anonymized_merchants
-        WHERE 1 - (embedding <=> ${JSON.stringify(embedding)}::vector) > 0.75
+        WHERE 1 - (embedding <=> ${embeddingStr}::vector) > 0.75
         ORDER BY similarity DESC
         LIMIT 5
       `);
@@ -198,20 +194,26 @@ Respond with ONLY a JSON object in this exact format:
 If no category is appropriate, respond with:
 {"category": null, "confidence": 0}`;
 
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 200,
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         messages: [
+          {
+            role: 'system',
+            content: 'You are a financial transaction categorizer. Always respond with valid JSON only.',
+          },
           {
             role: 'user',
             content: prompt,
           },
         ],
+        temperature: 0.3,
+        max_tokens: 100,
+        response_format: { type: 'json_object' },
       });
 
-      const content = response.content[0];
-      if (content.type === 'text') {
-        const result = JSON.parse(content.text.trim());
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        const result = JSON.parse(content.trim());
 
         if (result.category) {
           const matchingCategory = userCategories.find(
@@ -372,7 +374,7 @@ If no category is appropriate, respond with:
 
         await db.insert(anonymizedMerchants).values({
           merchantHash: hash,
-          embedding: JSON.stringify(embeddingResponse.data[0].embedding),
+          embedding: embeddingResponse.data[0].embedding as any, // pgvector will handle the array
           categoryName,
           confidence: 0.8,
           usageCount: 1,

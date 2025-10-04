@@ -1,4 +1,4 @@
-import type { Route } from "./+types/categories";
+import type { Route } from "./+types/projects";
 import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
@@ -7,52 +7,52 @@ import { Link } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Categories - WantNot" },
-    { name: "description", content: "Manage budget categories" },
+    { title: "Projects - WantNot" },
+    { name: "description", content: "Manage projects for accounting" },
   ];
 }
 
-export default function Categories() {
+export default function Projects() {
   return (
     <ProtectedRoute>
       <AppLayout>
-        <CategoriesPage />
+        <ProjectsPage />
       </AppLayout>
     </ProtectedRoute>
   );
 }
 
-function CategoriesPage() {
+function ProjectsPage() {
   const { getIdToken } = useAuth();
-  const [categories, setCategories] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC' });
+  const [formData, setFormData] = useState({ name: '', description: '', color: '#8B5CF6' });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchCategories = async () => {
+  const fetchProjects = async () => {
     try {
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const response = await fetch('/api/categories', {
+      const response = await fetch('/api/projects', {
         headers: { 'Authorization': `Bearer ${idToken}` },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setCategories(data.categories || []);
+        setProjects(data.projects || []);
       }
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error('Error fetching projects:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCategories();
+    fetchProjects();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,7 +64,7 @@ function CategoriesPage() {
       const idToken = await getIdToken();
       if (!idToken) throw new Error('Not authenticated');
 
-      const url = editing ? `/api/categories/${editing}` : '/api/categories';
+      const url = editing ? `/api/projects/${editing}` : '/api/projects';
       const method = editing ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -75,64 +75,64 @@ function CategoriesPage() {
         },
         body: JSON.stringify({
           name: formData.name,
-          budgetLimit: formData.budgetLimit ? parseFloat(formData.budgetLimit) : null,
+          description: formData.description || null,
           color: formData.color,
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to save category');
+      if (!response.ok) throw new Error('Failed to save project');
 
-      setSuccessMessage(editing ? 'Category updated!' : 'Category created!');
-      setFormData({ name: '', budgetLimit: '', color: '#41A6AC' });
+      setSuccessMessage(editing ? 'Project updated!' : 'Project created!');
+      setFormData({ name: '', description: '', color: '#8B5CF6' });
       setEditing(null);
-      await fetchCategories();
+      await fetchProjects();
     } catch (error) {
-      console.error('Error saving category:', error);
-      setErrorMessage('Failed to save category');
+      console.error('Error saving project:', error);
+      setErrorMessage('Failed to save project');
     }
   };
 
-  const handleEdit = (category: any) => {
-    setEditing(category.id);
+  const handleEdit = (project: any) => {
+    setEditing(project.id);
     setFormData({
-      name: category.name,
-      budgetLimit: category.budgetLimit || '',
-      color: category.color || '#41A6AC',
+      name: project.name,
+      description: project.description || '',
+      color: project.color || '#8B5CF6',
     });
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
+    if (!confirm('Are you sure you want to delete this project?')) return;
 
     try {
       const idToken = await getIdToken();
       if (!idToken) throw new Error('Not authenticated');
 
-      const response = await fetch(`/api/categories/${id}`, {
+      const response = await fetch(`/api/projects/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${idToken}` },
       });
 
-      if (!response.ok) throw new Error('Failed to delete category');
+      if (!response.ok) throw new Error('Failed to delete project');
 
-      setSuccessMessage('Category deleted!');
-      await fetchCategories();
+      setSuccessMessage('Project deleted!');
+      await fetchProjects();
     } catch (error) {
-      console.error('Error deleting category:', error);
-      setErrorMessage('Failed to delete category');
+      console.error('Error deleting project:', error);
+      setErrorMessage('Failed to delete project');
     }
   };
 
   const handleCancel = () => {
     setEditing(null);
-    setFormData({ name: '', budgetLimit: '', color: '#41A6AC' });
+    setFormData({ name: '', description: '', color: '#8B5CF6' });
   };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Budget Categories</h1>
-        <p className="text-gray-600 mt-1">Manage your spending categories and budgets</p>
+        <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
+        <p className="text-gray-600 mt-1">Track expenses by project for accounting and reporting</p>
       </div>
 
       {successMessage && (
@@ -147,34 +147,34 @@ function CategoriesPage() {
         </div>
       )}
 
-      {/* Categories List */}
+      {/* Projects List */}
       <div className="mb-6">
         {loading ? (
-          <div className="text-gray-600">Loading categories...</div>
-        ) : categories.length === 0 ? (
+          <div className="text-gray-600">Loading projects...</div>
+        ) : projects.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-            <p className="text-gray-600">No categories yet. Create your first one below!</p>
+            <p className="text-gray-600">No projects yet. Create your first one below!</p>
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {categories.map((category) => (
+            {projects.map((project) => (
               <Link
-                key={category.id}
-                to={`/categories/${category.id}`}
+                key={project.id}
+                to={`/projects/${project.id}`}
                 className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
               >
                 <div className="flex items-center gap-3">
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: category.color }}
+                    style={{ backgroundColor: project.color }}
                   />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-900 truncate group-hover:text-[#41A6AC] transition-colors">
-                      {category.name}
+                      {project.name}
                     </h3>
-                    {category.budgetLimit && (
-                      <p className="text-sm text-gray-600">
-                        ${parseFloat(category.budgetLimit).toFixed(2)}/mo
+                    {project.description && (
+                      <p className="text-sm text-gray-600 truncate">
+                        {project.description}
                       </p>
                     )}
                   </div>
@@ -191,13 +191,13 @@ function CategoriesPage() {
       {/* Create/Edit Form */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          {editing ? 'Edit Category' : 'Create New Category'}
+          {editing ? 'Edit Project' : 'Create New Project'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category Name
+                Project Name
               </label>
               <input
                 type="text"
@@ -210,15 +210,14 @@ function CategoriesPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Budget (optional)
+                Description (optional)
               </label>
               <input
-                type="number"
-                step="0.01"
-                value={formData.budgetLimit}
-                onChange={(e) => setFormData({ ...formData, budgetLimit: e.target.value })}
+                type="text"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent"
-                placeholder="500.00"
+                placeholder="Client project, personal venture, etc."
               />
             </div>
             <div>
@@ -241,7 +240,7 @@ function CategoriesPage() {
               type="submit"
               className="px-4 py-2 bg-[#41A6AC] text-white rounded-lg hover:bg-[#357f84] transition-colors font-medium"
             >
-              {editing ? 'Update Category' : 'Create Category'}
+              {editing ? 'Update Project' : 'Create Project'}
             </button>
             {editing && (
               <button

@@ -43,12 +43,25 @@ export const categories = pgTable('categories', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Projects for grouping transactions (e.g., client work, business ventures)
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  color: text('color').default('#8B5CF6'), // hex color code
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Transactions from Plaid
 export const transactions = pgTable('transactions', {
   id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: uuid('user_id').references(() => users.id).notNull(),
   accountId: uuid('account_id').references(() => accounts.id).notNull(),
   categoryId: uuid('category_id').references(() => categories.id),
+  projectId: uuid('project_id').references(() => projects.id),
   plaidTransactionId: text('plaid_transaction_id').notNull().unique(),
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
   isoCurrencyCode: text('iso_currency_code').default('USD'),

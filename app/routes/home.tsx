@@ -28,8 +28,12 @@ function AuthenticatedHome() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [categorizingId, setCategorizingId] = useState<string | null>(null);
+  const [taggingProjectId, setTaggingProjectId] = useState<string | null>(null);
 
   // Fetch accounts and transactions
   const fetchData = async () => {
@@ -37,11 +41,17 @@ function AuthenticatedHome() {
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const [accountsRes, transactionsRes] = await Promise.all([
+      const [accountsRes, transactionsRes, categoriesRes, projectsRes] = await Promise.all([
         fetch('/api/accounts', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
         fetch('/api/transactions', {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }),
+        fetch('/api/categories', {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }),
+        fetch('/api/projects', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
       ]);
@@ -54,6 +64,16 @@ function AuthenticatedHome() {
       if (transactionsRes.ok) {
         const data = await transactionsRes.json();
         setTransactions(data.transactions || []);
+      }
+
+      if (categoriesRes.ok) {
+        const data = await categoriesRes.json();
+        setCategories(data.categories || []);
+      }
+
+      if (projectsRes.ok) {
+        const data = await projectsRes.json();
+        setProjects(data.projects || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -143,6 +163,76 @@ function AuthenticatedHome() {
     setErrorMessage('An error occurred with Plaid Link. Please try again.');
   };
 
+  const handleCategorize = async (transactionId: string, categoryId: string | null) => {
+    try {
+      setCategorizingId(transactionId);
+      const idToken = await getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+
+      const response = await fetch(`/api/transactions/${transactionId}/categorize`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ categoryId }),
+      });
+
+      if (!response.ok) throw new Error('Failed to categorize transaction');
+
+      // Update local state
+      setTransactions(transactions.map(txn =>
+        txn.id === transactionId
+          ? { ...txn, categoryId, autoCategorizationMethod: 'manual', autoCategorizationConfidence: 1.0 }
+          : txn
+      ));
+
+      setSuccessMessage('Transaction categorized!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error categorizing transaction:', error);
+      setErrorMessage('Failed to categorize transaction');
+      setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setCategorizingId(null);
+    }
+  };
+
+  const handleTagProject = async (transactionId: string, projectId: string | null) => {
+    try {
+      setTaggingProjectId(transactionId);
+      const idToken = await getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+
+      const response = await fetch(`/api/transactions/${transactionId}/tag-project`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ projectId }),
+      });
+
+      if (!response.ok) throw new Error('Failed to tag transaction with project');
+
+      // Update local state
+      setTransactions(transactions.map(txn =>
+        txn.id === transactionId
+          ? { ...txn, projectId }
+          : txn
+      ));
+
+      setSuccessMessage('Transaction tagged with project!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error tagging transaction with project:', error);
+      setErrorMessage('Failed to tag transaction with project');
+      setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setTaggingProjectId(null);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {successMessage && (
@@ -220,24 +310,116 @@ function AuthenticatedHome() {
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="divide-y divide-gray-200">
-              {transactions.map((txn) => (
-                <div key={txn.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
-                  <div>
-                    <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(txn.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
-                    </p>
-                    {txn.pending && (
-                      <span className="text-xs text-yellow-600">Pending</span>
+              {transactions.map((txn) => {
+                const category = categories.find(c => c.id === txn.categoryId);
+                const project = projects.find(p => p.id === txn.projectId);
+                return (
+                  <div key={txn.id} className="p-4 hover:bg-gray-50">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <p className="text-sm text-gray-500">
+                            {new Date(txn.date).toLocaleDateString()}
+                          </p>
+                          {txn.pending && (
+                            <span className="text-xs px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded">
+                              Pending
+                            </span>
+                          )}
+                          {txn.autoCategorizationMethod && txn.autoCategorizationMethod !== 'manual' && (
+                            <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
+                              Auto: {txn.autoCategorizationMethod}
+                              {txn.autoCategorizationConfidence &&
+                                ` (${Math.round(txn.autoCategorizationConfidence * 100)}%)`
+                              }
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <select
+                            value={txn.categoryId || ''}
+                            onChange={(e) => handleCategorize(txn.id, e.target.value || null)}
+                            disabled={categorizingId === txn.id}
+                            className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 pr-8"
+                          >
+                            <option value="">Uncategorized</option>
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                          </select>
+                          {categorizingId === txn.id && (
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <svg className="animate-spin h-4 w-4 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <select
+                            value={txn.projectId || ''}
+                            onChange={(e) => handleTagProject(txn.id, e.target.value || null)}
+                            disabled={taggingProjectId === txn.id}
+                            className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 pr-8"
+                          >
+                            <option value="">No project</option>
+                            {projects.map((proj) => (
+                              <option key={proj.id} value={proj.id}>
+                                {proj.name}
+                              </option>
+                            ))}
+                          </select>
+                          {taggingProjectId === txn.id && (
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <svg className="animate-spin h-4 w-4 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-right min-w-[80px]">
+                          <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(category || project) && (
+                      <div className="mt-2 flex items-center gap-4">
+                        {category && (
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: category.color }}
+                            />
+                            <span className="text-xs text-gray-600">{category.name}</span>
+                          </div>
+                        )}
+                        {project && (
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: project.color }}
+                            />
+                            <span className="text-xs text-gray-600">{project.name}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

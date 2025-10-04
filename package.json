@@ -13,7 +13,6 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.65.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",

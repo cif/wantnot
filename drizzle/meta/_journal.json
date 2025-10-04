@@ -8,6 +8,13 @@
       "when": 1759584195834,
       "tag": "0000_thin_nicolaos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759587776186,
+      "tag": "0001_easy_thor",
+      "breakpoints": true
     }
   ]
 }
