@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { plaidClient } from './plaid';
 import { db, accounts, transactions } from '~/db';
 import { CountryCode, Products } from 'plaid';
+import { CategorizationService } from './categorization-service';
 
 export interface CreateAccountParams {
   userId: string;
@@ -152,6 +153,14 @@ export class PlaidService {
             .limit(1);
 
           if (existing.length === 0) {
+            // Auto-categorize the transaction
+            const categorization = await CategorizationService.categorizeTransaction(userId, {
+              name: txn.name,
+              merchantName: txn.merchant_name || null,
+              amount: txn.amount.toString(),
+              plaidCategory: txn.category || null,
+            });
+
             await db.insert(transactions).values({
               userId,
               accountId,
@@ -165,6 +174,9 @@ export class PlaidService {
               pending: txn.pending,
               plaidCategory: txn.category || null,
               plaidCategoryId: txn.category_id || null,
+              categoryId: categorization.categoryId || undefined,
+              autoCategorizationMethod: categorization.method || undefined,
+              autoCategorizationConfidence: categorization.confidence || undefined,
             });
           }
         } catch (txnError) {

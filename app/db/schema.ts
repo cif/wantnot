@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, decimal, boolean, integer, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, decimal, boolean, integer, uuid, vector, real, index } from 'drizzle-orm/pg-core';
 
 // Users table - links Firebase UID to database records
 export const users = pgTable('users', {
@@ -64,9 +64,39 @@ export const transactions = pgTable('transactions', {
   // User notes and custom fields
   notes: text('notes'),
   isHidden: boolean('is_hidden').default(false).notNull(),
+  // Auto-categorization metadata
+  autoCategorizationMethod: text('auto_categorization_method'), // 'rule' | 'vector' | 'llm' | 'manual' | null
+  autoCategorizationConfidence: real('auto_categorization_confidence'), // 0.0 - 1.0
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// User-specific category matching rules (learned from manual categorizations)
+export const categoryMatchings = pgTable('category_matchings', {
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  categoryId: uuid('category_id').references(() => categories.id).notNull(),
+  merchantPattern: text('merchant_pattern').notNull(), // normalized merchant name or pattern
+  confidence: real('confidence').default(1.0).notNull(), // increases with repeated matches
+  matchCount: integer('match_count').default(1).notNull(), // how many times this rule has matched
+  lastMatched: timestamp('last_matched'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Anonymized merchant embeddings for cross-user learning (privacy-preserving)
+export const anonymizedMerchants = pgTable('anonymized_merchants', {
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  merchantHash: text('merchant_hash').notNull().unique(), // SHA-256 hash of normalized merchant name
+  embedding: vector('embedding', { dimensions: 1536 }), // OpenAI text-embedding-3-small dimensions
+  categoryName: text('category_name').notNull(), // anonymized category name (not user-specific)
+  confidence: real('confidence').default(1.0).notNull(),
+  usageCount: integer('usage_count').default(1).notNull(), // how many users contributed
+  lastUpdated: timestamp('last_updated').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  embeddingIdx: index('anonymized_merchants_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
+}));
 
 // Plaid webhook events tracking
 export const plaidWebhooks = pgTable('plaid_webhooks', {

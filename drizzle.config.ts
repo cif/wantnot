@@ -9,4 +9,7 @@ export default defineConfig({
   },
   verbose: true,
   strict: true,
+  studio: {
+    port: 5555,
+  },
 });

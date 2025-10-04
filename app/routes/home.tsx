@@ -1,12 +1,13 @@
 import type { Route } from "./+types/home";
 import { ProtectedRoute } from "~/components/ProtectedRoute";
+import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
 import { PlaidLinkButton } from "~/components/PlaidLinkButton";
 import { useState, useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "WantNot" },
+    { title: "Transactions - WantNot" },
     { name: "description", content: "Financial budgeting and expense tracking" },
   ];
 }
@@ -14,13 +15,15 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   return (
     <ProtectedRoute>
-      <AuthenticatedHome />
+      <AppLayout>
+        <AuthenticatedHome />
+      </AppLayout>
     </ProtectedRoute>
   );
 }
 
 function AuthenticatedHome() {
-  const { user, logout, getIdToken } = useAuth();
+  const { user, getIdToken } = useAuth();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -141,129 +144,104 @@ function AuthenticatedHome() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-[#41A6AC]">WantNot</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">
-                Welcome, {user?.displayName || user?.email}
-              </span>
-              <button
-                onClick={logout}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      {successMessage && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
+          {successMessage}
         </div>
-      </nav>
+      )}
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {successMessage && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
-              {successMessage}
-            </div>
-          )}
+      {errorMessage && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+          {errorMessage}
+        </div>
+      )}
 
-          {errorMessage && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
-              {errorMessage}
-            </div>
-          )}
+      {/* Connected Accounts */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-semibold text-gray-900">Connected Accounts</h2>
+          <PlaidLinkButton
+            onSuccess={handlePlaidSuccess}
+            onError={handlePlaidError}
+          />
+        </div>
 
-          {/* Connected Accounts */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold text-gray-900">Connected Accounts</h2>
-              <PlaidLinkButton
-                onSuccess={handlePlaidSuccess}
-                onError={handlePlaidError}
-              />
-            </div>
-
-            {loading ? (
-              <div className="text-gray-600">Loading...</div>
-            ) : accounts.length === 0 ? (
-              <p className="text-gray-600">No accounts connected yet. Click the button above to get started!</p>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {accounts.map((account) => (
-                  <div key={account.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{account.name}</h3>
-                        {account.mask && (
-                          <p className="text-sm text-gray-500">••••{account.mask}</p>
-                        )}
-                      </div>
-                      <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
-                        {account.type}
-                      </span>
-                    </div>
-                    {account.currentBalance && (
-                      <p className="text-2xl font-bold text-gray-900 mt-4">
-                        ${parseFloat(account.currentBalance).toFixed(2)}
-                      </p>
+        {loading ? (
+          <div className="text-gray-600">Loading...</div>
+        ) : accounts.length === 0 ? (
+          <p className="text-gray-600">No accounts connected yet. Click the button above to get started!</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {accounts.map((account) => (
+              <div key={account.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{account.name}</h3>
+                    {account.mask && (
+                      <p className="text-sm text-gray-500">••••{account.mask}</p>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Transactions */}
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold text-gray-900">Recent Transactions</h2>
-              <button
-                onClick={handleRefreshTransactions}
-                disabled={refreshing || accounts.length === 0}
-                className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="text-gray-600">Loading...</div>
-            ) : transactions.length === 0 ? (
-              <p className="text-gray-600">No transactions yet.</p>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="divide-y divide-gray-200">
-                  {transactions.map((txn) => (
-                    <div key={txn.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
-                      <div>
-                        <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(txn.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
-                        </p>
-                        {txn.pending && (
-                          <span className="text-xs text-yellow-600">Pending</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                  <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
+                    {account.type}
+                  </span>
                 </div>
+                {account.currentBalance && (
+                  <p className="text-2xl font-bold text-gray-900 mt-4">
+                    ${parseFloat(account.currentBalance).toFixed(2)}
+                  </p>
+                )}
               </div>
-            )}
+            ))}
           </div>
+        )}
+      </div>
+
+      {/* Transactions */}
+      <div>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-semibold text-gray-900">Recent Transactions</h2>
+          <button
+            onClick={handleRefreshTransactions}
+            disabled={refreshing || accounts.length === 0}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
-      </main>
+
+        {loading ? (
+          <div className="text-gray-600">Loading...</div>
+        ) : transactions.length === 0 ? (
+          <p className="text-gray-600">No transactions yet.</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="divide-y divide-gray-200">
+              {transactions.map((txn) => (
+                <div key={txn.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
+                  <div>
+                    <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(txn.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
+                    </p>
+                    {txn.pending && (
+                      <span className="text-xs text-yellow-600">Pending</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
