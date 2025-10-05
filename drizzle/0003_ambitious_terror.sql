@@ -1,0 +1,1 @@
+ALTER TABLE "categories" ADD COLUMN "is_income" boolean DEFAULT false NOT NULL;

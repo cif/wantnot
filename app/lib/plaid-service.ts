@@ -158,13 +158,8 @@ export class PlaidService {
       // Handle ADDED transactions
       for (const txn of added) {
         try {
-          // Auto-categorize the transaction
-          const categorization = await CategorizationService.categorizeTransaction(userId, {
-            name: txn.name,
-            merchantName: txn.merchant_name || null,
-            amount: txn.amount.toString(),
-            plaidCategory: txn.category || null,
-          });
+          // Skip auto-categorization during sync for performance
+          // Users can use the AI suggest feature to categorize in bulk
 
           // Use onConflictDoNothing to make inserts idempotent
           const result = await db
@@ -183,9 +178,6 @@ export class PlaidService {
               pending: txn.pending,
               plaidCategory: txn.category || null,
               plaidCategoryId: txn.category_id || null,
-              categoryId: categorization.categoryId || undefined,
-              autoCategorizationMethod: categorization.method || undefined,
-              autoCategorizationConfidence: categorization.confidence || undefined,
             })
             .onConflictDoNothing({ target: transactions.plaidTransactionId })
             .returning();

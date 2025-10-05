@@ -39,6 +39,7 @@ export const categories = pgTable('categories', {
   description: text('description'),
   color: text('color').default('#6B7280'), // hex color code
   budgetLimit: decimal('budget_limit', { precision: 12, scale: 2 }),
+  isIncome: boolean('is_income').default(false).notNull(), // true for income categories, false for expense categories
   isDefault: boolean('is_default').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -30,7 +30,7 @@ export async function action({ request, params }: { request: Request; params: { 
 
     if (method === 'PUT') {
       const body = await request.json();
-      const { name, budgetLimit, color } = body;
+      const { name, budgetLimit, color, isIncome } = body;
 
       const updated = await db
         .update(categories)
@@ -38,6 +38,7 @@ export async function action({ request, params }: { request: Request; params: { 
           name: name || category[0].name,
           budgetLimit: budgetLimit !== undefined ? budgetLimit?.toString() : category[0].budgetLimit,
           color: color || category[0].color,
+          isIncome: isIncome !== undefined ? isIncome : category[0].isIncome,
           updatedAt: new Date(),
         })
         .where(eq(categories.id, categoryId))

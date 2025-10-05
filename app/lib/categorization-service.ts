@@ -125,7 +125,7 @@ export class CategorizationService {
         LIMIT 5
       `);
 
-      if (similar.rows.length > 0) {
+      if (similar.rows && similar.rows.length > 0) {
         // Get the best match
         const bestMatch = similar.rows[0] as {
           category_name: string;

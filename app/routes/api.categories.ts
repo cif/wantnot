@@ -36,7 +36,7 @@ export async function action({ request }: { request: Request }) {
     }
 
     const body = await request.json();
-    const { name, budgetLimit, color } = body;
+    const { name, budgetLimit, color, isIncome } = body;
 
     if (!name) {
       return Response.json({ error: 'Category name is required' }, { status: 400 });
@@ -49,6 +49,7 @@ export async function action({ request }: { request: Request }) {
         name,
         budgetLimit: budgetLimit ? budgetLimit.toString() : null,
         color: color || '#41A6AC',
+        isIncome: isIncome || false,
       })
       .returning();
 

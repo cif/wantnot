@@ -19,7 +19,8 @@ export async function loader({ request }: { request: Request }) {
       .where(and(
         eq(transactions.userId, user.id),
         isNull(transactions.categoryId),
-        eq(transactions.isHidden, false)
+        eq(transactions.isHidden, false),
+        eq(transactions.pending, false)
       ))
       .orderBy(transactions.date);
 

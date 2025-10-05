@@ -21,7 +21,8 @@ export async function loader({ request, params }: { request: Request; params: { 
       .where(and(
         eq(transactions.userId, user.id),
         eq(transactions.projectId, projectId),
-        eq(transactions.isHidden, false)
+        eq(transactions.isHidden, false),
+        eq(transactions.pending, false)
       ))
       .orderBy(desc(transactions.date));
 

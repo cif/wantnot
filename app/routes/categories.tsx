@@ -27,7 +27,7 @@ function CategoriesPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC' });
+  const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC', isIncome: false });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
@@ -101,13 +101,14 @@ function CategoriesPage() {
           name: formData.name,
           budgetLimit: formData.budgetLimit ? parseFloat(formData.budgetLimit) : null,
           color: formData.color,
+          isIncome: formData.isIncome,
         }),
       });
 
       if (!response.ok) throw new Error('Failed to save category');
 
       setSuccessMessage(editing ? 'Category updated!' : 'Category created!');
-      setFormData({ name: '', budgetLimit: '', color: '#41A6AC' });
+      setFormData({ name: '', budgetLimit: '', color: '#41A6AC', isIncome: false });
       setEditing(null);
       await fetchCategories();
     } catch (error) {
@@ -122,6 +123,7 @@ function CategoriesPage() {
       name: category.name,
       budgetLimit: category.budgetLimit || '',
       color: category.color || '#41A6AC',
+      isIncome: category.isIncome || false,
     });
   };
 
@@ -149,7 +151,7 @@ function CategoriesPage() {
 
   const handleCancel = () => {
     setEditing(null);
-    setFormData({ name: '', budgetLimit: '', color: '#41A6AC' });
+    setFormData({ name: '', budgetLimit: '', color: '#41A6AC', isIncome: false });
   };
 
   const handleAISuggest = async () => {
@@ -541,6 +543,17 @@ function CategoriesPage() {
                 <span className="text-sm text-gray-600">{formData.color}</span>
               </div>
             </div>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.isIncome}
+                onChange={(e) => setFormData({ ...formData, isIncome: e.target.checked })}
+                className="h-4 w-4 text-[#41A6AC] focus:ring-[#41A6AC] border-gray-300 rounded"
+              />
+              <span className="text-sm font-medium text-gray-700">Income Category</span>
+            </label>
           </div>
           <div className="flex gap-2">
             <button

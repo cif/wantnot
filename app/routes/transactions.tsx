@@ -317,11 +317,16 @@ function TransactionsPage() {
                         className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
                       >
                         <option value="">Uncategorized</option>
-                        {categories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
-                        ))}
+                        {categories
+                          .filter(cat => {
+                            const isIncome = parseFloat(txn.amount) < 0;
+                            return cat.isIncome === isIncome;
+                          })
+                          .map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))}
                       </select>
                       {categorizingId === txn.id && (
                         <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">

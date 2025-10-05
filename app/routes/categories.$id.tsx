@@ -31,7 +31,7 @@ function CategoryDetailPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC' });
+  const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC', isIncome: false });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -53,6 +53,7 @@ function CategoryDetailPage() {
             name: cat.name,
             budgetLimit: cat.budgetLimit || '',
             color: cat.color || '#41A6AC',
+            isIncome: cat.isIncome || false,
           });
         }
       }
@@ -109,6 +110,7 @@ function CategoryDetailPage() {
           name: formData.name,
           budgetLimit: formData.budgetLimit ? parseFloat(formData.budgetLimit) : null,
           color: formData.color,
+          isIncome: formData.isIncome,
         }),
       });
 
@@ -257,6 +259,17 @@ function CategoryDetailPage() {
                 </div>
               </div>
             </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isIncome}
+                  onChange={(e) => setFormData({ ...formData, isIncome: e.target.checked })}
+                  className="h-4 w-4 text-[#41A6AC] focus:ring-[#41A6AC] border-gray-300 rounded"
+                />
+                <span className="text-sm font-medium text-gray-700">Income Category</span>
+              </label>
+            </div>
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -310,7 +323,7 @@ function CategoryDetailPage() {
                   </div>
                 </div>
                 <div className="text-right ml-4">
-                  <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-gray-700'}`}>
                     {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
                   </p>
                   {txn.pending && (

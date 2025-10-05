@@ -30,6 +30,7 @@ function AuthenticatedHome() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [budgetSummary, setBudgetSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [categorizingId, setCategorizingId] = useState<string | null>(null);
@@ -41,7 +42,7 @@ function AuthenticatedHome() {
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const [accountsRes, transactionsRes, categoriesRes, projectsRes] = await Promise.all([
+      const [accountsRes, transactionsRes, categoriesRes, projectsRes, budgetRes] = await Promise.all([
         fetch('/api/accounts', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
@@ -52,6 +53,9 @@ function AuthenticatedHome() {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
         fetch('/api/projects', {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }),
+        fetch('/api/budget/summary', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
       ]);
@@ -75,6 +79,11 @@ function AuthenticatedHome() {
         const data = await projectsRes.json();
         setProjects(data.projects || []);
       }
+
+      if (budgetRes.ok) {
+        const data = await budgetRes.json();
+        setBudgetSummary(data);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -82,7 +91,7 @@ function AuthenticatedHome() {
     }
   };
 
-  // Refresh transactions
+  // Refresh transactions and balances
   const handleRefreshTransactions = async () => {
     setRefreshing(true);
     setErrorMessage(null);
@@ -90,25 +99,41 @@ function AuthenticatedHome() {
       const idToken = await getIdToken();
       if (!idToken) throw new Error('Not authenticated');
 
-      const response = await fetch('/api/plaid/sync-transactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({}),
-      });
+      // Refresh both balances and transactions in parallel
+      const [balancesRes, transactionsRes] = await Promise.all([
+        fetch('/api/accounts/refresh-balances', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({}),
+        }),
+        fetch('/api/plaid/sync-transactions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({}),
+        }),
+      ]);
 
-      if (!response.ok) throw new Error('Failed to refresh transactions');
+      if (!transactionsRes.ok) throw new Error('Failed to refresh transactions');
 
-      const data = await response.json();
-      setSuccessMessage(`Synced transactions for ${data.totalAccounts} account(s)`);
+      const transactionsData = await transactionsRes.json();
+      const balancesData = balancesRes.ok ? await balancesRes.json() : null;
+
+      setSuccessMessage(
+        `Synced transactions for ${transactionsData.totalAccounts} account(s)` +
+        (balancesData ? ` and refreshed ${balancesData.refreshed} balance(s)` : '')
+      );
 
       // Refresh the data
       await fetchData();
     } catch (error) {
-      console.error('Error refreshing transactions:', error);
-      setErrorMessage('Failed to refresh transactions');
+      console.error('Error refreshing data:', error);
+      setErrorMessage('Failed to refresh data');
     } finally {
       setRefreshing(false);
     }
@@ -287,6 +312,94 @@ function AuthenticatedHome() {
         )}
       </div>
 
+      {/* Budget Summary */}
+      {budgetSummary && budgetSummary.summary.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4">
+            <h2 className="text-2xl font-semibold text-gray-900">Budget Summary</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Spending by category for {new Date(budgetSummary.startDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            {/* Totals */}
+            <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-gray-200">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">This Month</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  ${budgetSummary.totals.spent.toFixed(2)}
+                </p>
+                {budgetSummary.totals.budget && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {budgetSummary.totals.percentOfBudget.toFixed(0)}% of ${budgetSummary.totals.budget.toFixed(2)} budget
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Last Month</p>
+                <p className="text-3xl font-bold text-gray-500">
+                  ${budgetSummary.totals.priorSpent.toFixed(2)}
+                </p>
+                {budgetSummary.totals.change !== 0 && (
+                  <p className={`text-xs mt-1 ${budgetSummary.totals.change > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {budgetSummary.totals.change > 0 ? '+' : ''}{budgetSummary.totals.change.toFixed(1)}% vs last month
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Category Breakdown */}
+            <div className="space-y-4">
+              {budgetSummary.summary.map((item: any) => (
+                <div key={item.categoryId || 'uncategorized'}>
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2 flex-1">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5"
+                        style={{ backgroundColor: item.categoryColor }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">{item.categoryName}</p>
+                      </div>
+                    </div>
+                    <div className="text-right ml-4 flex-shrink-0">
+                      <p className="font-semibold text-gray-900 text-sm">
+                        ${item.spent.toFixed(2)}
+                      </p>
+                      {item.priorSpent > 0 && (
+                        <p className="text-xs text-gray-500">
+                          ${item.priorSpent.toFixed(2)} prior
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress bar for budget */}
+                  {item.budgetLimit && (
+                    <div className="mt-1">
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            item.percentOfBudget > 100 ? 'bg-red-500' :
+                            item.percentOfBudget > 80 ? 'bg-yellow-500' :
+                            'bg-[#41A6AC]'
+                          }`}
+                          style={{ width: `${Math.min(item.percentOfBudget, 100)}%` }}
+                        />
+                      </div>
+                      <p className={`text-xs mt-1 ${item.percentOfBudget > 100 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {item.percentOfBudget.toFixed(0)}% of ${item.budgetLimit.toFixed(2)} budget
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Uncategorized Transactions */}
       <div>
         <div className="flex justify-between items-center mb-4">
@@ -358,11 +471,16 @@ function AuthenticatedHome() {
                             className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 pr-8"
                           >
                             <option value="">Uncategorized</option>
-                            {categories.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </option>
-                            ))}
+                            {categories
+                              .filter(cat => {
+                                const isIncome = parseFloat(txn.amount) < 0;
+                                return cat.isIncome === isIncome;
+                              })
+                              .map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
                           </select>
                           {categorizingId === txn.id && (
                             <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
