@@ -1,7 +1,7 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
 import { db, transactions } from '~/db';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 
 export async function loader({ request }: { request: Request }) {
   try {
@@ -19,10 +19,14 @@ export async function loader({ request }: { request: Request }) {
     }
 
     // Get user's transactions, ordered by date (most recent first)
+    // Filter out hidden transactions (removed by Plaid, typically pending->posted transitions)
     const userTransactions = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.userId, user.id))
+      .where(and(
+        eq(transactions.userId, user.id),
+        eq(transactions.isHidden, false)
+      ))
       .orderBy(desc(transactions.date))
       .limit(100); // Limit to most recent 100 transactions
 

@@ -2,8 +2,11 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
   index("routes/home.tsx"),
+  route("transactions", "routes/transactions.tsx"),
   route("categories", "routes/categories.tsx"),
   route("categories/:id", "routes/categories.$id.tsx"),
+  route("projects", "routes/projects.tsx"),
+  route("projects/:id", "routes/projects.$id.tsx"),
   route("api/plaid/create-link-token", "routes/api.plaid.create-link-token.ts"),
   route("api/plaid/exchange-token", "routes/api.plaid.exchange-token.ts"),
   route("api/plaid/sync-transactions", "routes/api.plaid.sync-transactions.ts"),
@@ -15,6 +18,8 @@ export default [
   route("api/transactions/:id/tag-project", "routes/api.transactions.$id.tag-project.ts"),
   route("api/categories", "routes/api.categories.ts"),
   route("api/categories/:id", "routes/api.categories.$id.ts"),
+  route("api/categories/ai-suggest", "routes/api.categories.ai-suggest.ts"),
   route("api/projects", "routes/api.projects.ts"),
   route("api/projects/:id", "routes/api.projects.$id.ts"),
+  route("api/projects/:id/transactions", "routes/api.projects.$id.transactions.ts"),
 ] satisfies RouteConfig;

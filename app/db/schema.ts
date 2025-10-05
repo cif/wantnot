@@ -26,6 +26,7 @@ export const accounts = pgTable('accounts', {
   availableBalance: decimal('available_balance', { precision: 12, scale: 2 }),
   isoCurrencyCode: text('iso_currency_code').default('USD'),
   isActive: boolean('is_active').default(true).notNull(),
+  transactionsCursor: text('transactions_cursor'), // Cursor for /transactions/sync
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -63,6 +64,7 @@ export const transactions = pgTable('transactions', {
   categoryId: uuid('category_id').references(() => categories.id),
   projectId: uuid('project_id').references(() => projects.id),
   plaidTransactionId: text('plaid_transaction_id').notNull().unique(),
+  pendingTransactionId: text('pending_transaction_id'), // Links posted transaction to its pending version
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
   isoCurrencyCode: text('iso_currency_code').default('USD'),
   name: text('name').notNull(),
@@ -78,7 +80,7 @@ export const transactions = pgTable('transactions', {
   notes: text('notes'),
   isHidden: boolean('is_hidden').default(false).notNull(),
   // Auto-categorization metadata
-  autoCategorizationMethod: text('auto_categorization_method'), // 'rule' | 'vector' | 'llm' | 'manual' | null
+  autoCategorizationMethod: text('auto_categorization_method'), // 'rule' | 'vector' | 'llm' | 'manual' | 'ai' | null
   autoCategorizationConfidence: real('auto_categorization_confidence'), // 0.0 - 1.0
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

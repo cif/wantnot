@@ -126,45 +126,54 @@ export class PlaidService {
     }
   }
 
-  // Sync transactions for an account
+  // Sync transactions for an account using /transactions/sync
   static async syncTransactions(userId: string, accountId: string, accessToken: string) {
     try {
-      // Get transactions from the last 30 days
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
-      const endDate = new Date();
+      // Get the account to retrieve the cursor
+      const account = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, accountId))
+        .limit(1);
 
-      const response = await plaidClient.transactionsGet({
+      if (account.length === 0) {
+        throw new Error('Account not found');
+      }
+
+      const cursor = account[0].transactionsCursor || undefined;
+
+      // Use /transactions/sync instead of /transactions/get
+      const response = await plaidClient.transactionsSync({
         access_token: accessToken,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
+        cursor: cursor,
+        count: 500, // Max per request
       });
 
-      const plaidTransactions = response.data.transactions;
+      const { added, modified, removed, next_cursor, has_more } = response.data;
 
-      // Save transactions to database
-      for (const txn of plaidTransactions) {
+      let addedCount = 0;
+      let modifiedCount = 0;
+      let removedCount = 0;
+
+      // Handle ADDED transactions
+      for (const txn of added) {
         try {
-          // Check if transaction already exists
-          const existing = await db
-            .select()
-            .from(transactions)
-            .where(eq(transactions.plaidTransactionId, txn.transaction_id))
-            .limit(1);
+          // Auto-categorize the transaction
+          const categorization = await CategorizationService.categorizeTransaction(userId, {
+            name: txn.name,
+            merchantName: txn.merchant_name || null,
+            amount: txn.amount.toString(),
+            plaidCategory: txn.category || null,
+          });
 
-          if (existing.length === 0) {
-            // Auto-categorize the transaction
-            const categorization = await CategorizationService.categorizeTransaction(userId, {
-              name: txn.name,
-              merchantName: txn.merchant_name || null,
-              amount: txn.amount.toString(),
-              plaidCategory: txn.category || null,
-            });
-
-            await db.insert(transactions).values({
+          // Use onConflictDoNothing to make inserts idempotent
+          const result = await db
+            .insert(transactions)
+            .values({
               userId,
               accountId,
               plaidTransactionId: txn.transaction_id,
+              pendingTransactionId: txn.pending_transaction_id || undefined,
               amount: txn.amount.toString(),
               isoCurrencyCode: txn.iso_currency_code || 'USD',
               name: txn.name,
@@ -177,17 +186,82 @@ export class PlaidService {
               categoryId: categorization.categoryId || undefined,
               autoCategorizationMethod: categorization.method || undefined,
               autoCategorizationConfidence: categorization.confidence || undefined,
-            });
+            })
+            .onConflictDoNothing({ target: transactions.plaidTransactionId })
+            .returning();
+
+          if (result.length > 0) {
+            addedCount++;
           }
         } catch (txnError) {
           console.error(`Error saving transaction ${txn.transaction_id}:`, txnError);
-          // Continue with other transactions
         }
       }
 
+      // Handle MODIFIED transactions
+      for (const txn of modified) {
+        try {
+          await db
+            .update(transactions)
+            .set({
+              amount: txn.amount.toString(),
+              name: txn.name,
+              merchantName: txn.merchant_name || null,
+              date: new Date(txn.date),
+              authorizedDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
+              pending: txn.pending,
+              plaidCategory: txn.category || null,
+              plaidCategoryId: txn.category_id || null,
+              updatedAt: new Date(),
+            })
+            .where(eq(transactions.plaidTransactionId, txn.transaction_id));
+
+          modifiedCount++;
+        } catch (txnError) {
+          console.error(`Error updating transaction ${txn.transaction_id}:`, txnError);
+        }
+      }
+
+      // Handle REMOVED transactions (hide them instead of deleting to preserve user categorizations)
+      for (const txnId of removed.map(r => r.transaction_id)) {
+        try {
+          await db
+            .update(transactions)
+            .set({
+              isHidden: true,
+              updatedAt: new Date(),
+            })
+            .where(eq(transactions.plaidTransactionId, txnId));
+
+          removedCount++;
+        } catch (txnError) {
+          console.error(`Error hiding transaction ${txnId}:`, txnError);
+        }
+      }
+
+      // Update the cursor for this account
+      await db
+        .update(accounts)
+        .set({
+          transactionsCursor: next_cursor,
+          updatedAt: new Date(),
+        })
+        .where(eq(accounts.id, accountId));
+
+      // If there are more transactions, recursively sync again
+      if (has_more) {
+        const nextResult = await this.syncTransactions(userId, accountId, accessToken);
+        return {
+          added: addedCount + nextResult.added,
+          modified: modifiedCount + nextResult.modified,
+          removed: removedCount + nextResult.removed,
+        };
+      }
+
       return {
-        added: plaidTransactions.length,
-        total: response.data.total_transactions,
+        added: addedCount,
+        modified: modifiedCount,
+        removed: removedCount,
       };
     } catch (error) {
       console.error('Error syncing transactions:', error);

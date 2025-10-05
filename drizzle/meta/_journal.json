@@ -15,6 +15,13 @@
       "when": 1759587776186,
       "tag": "0001_easy_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759671258023,
+      "tag": "0002_goofy_miek",
+      "breakpoints": true
     }
   ]
 }

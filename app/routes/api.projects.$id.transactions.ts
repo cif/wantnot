@@ -1,10 +1,10 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
 import { db, transactions } from '~/db';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 
-// GET - Get all uncategorized transactions
-export async function loader({ request }: { request: Request }) {
+// GET - Get all transactions for a specific project
+export async function loader({ request, params }: { request: Request; params: { id: string } }) {
   try {
     const firebaseUser = await authenticateRequest(request);
     const user = await UserService.getUserByFirebaseUid(firebaseUser.uid);
@@ -13,22 +13,21 @@ export async function loader({ request }: { request: Request }) {
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const uncategorized = await db
+    const projectId = params.id;
+
+    const projectTransactions = await db
       .select()
       .from(transactions)
       .where(and(
         eq(transactions.userId, user.id),
-        isNull(transactions.categoryId),
+        eq(transactions.projectId, projectId),
         eq(transactions.isHidden, false)
       ))
-      .orderBy(transactions.date);
+      .orderBy(desc(transactions.date));
 
-    return Response.json({
-      transactions: uncategorized,
-      count: uncategorized.length
-    });
+    return Response.json({ transactions: projectTransactions });
   } catch (error) {
-    console.error('Error fetching uncategorized transactions:', error);
+    console.error('Error fetching project transactions:', error);
     return Response.json({ error: 'Failed to fetch transactions' }, { status: 500 });
   }
 }

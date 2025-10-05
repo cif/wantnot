@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Transactions - WantNot" },
+    { title: "Dashboard - WantNot" },
     { name: "description", content: "Financial budgeting and expense tracking" },
   ];
 }
@@ -287,10 +287,15 @@ function AuthenticatedHome() {
         )}
       </div>
 
-      {/* Transactions */}
+      {/* Uncategorized Transactions */}
       <div>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-semibold text-gray-900">Recent Transactions</h2>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900">Needs Categorization</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              {transactions.filter(txn => !txn.categoryId).length} uncategorized transaction{transactions.filter(txn => !txn.categoryId).length !== 1 ? 's' : ''}
+            </p>
+          </div>
           <button
             onClick={handleRefreshTransactions}
             disabled={refreshing || accounts.length === 0}
@@ -305,12 +310,18 @@ function AuthenticatedHome() {
 
         {loading ? (
           <div className="text-gray-600">Loading...</div>
-        ) : transactions.length === 0 ? (
-          <p className="text-gray-600">No transactions yet.</p>
+        ) : transactions.filter(txn => !txn.categoryId).length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+            <svg className="w-12 h-12 text-green-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-gray-900 font-semibold mb-1">All caught up!</p>
+            <p className="text-gray-600 text-sm">All your transactions have been categorized.</p>
+          </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="divide-y divide-gray-200">
-              {transactions.map((txn) => {
+              {transactions.filter(txn => !txn.categoryId).map((txn) => {
                 const category = categories.find(c => c.id === txn.categoryId);
                 const project = projects.find(p => p.id === txn.projectId);
                 return (
@@ -388,7 +399,7 @@ function AuthenticatedHome() {
                         </div>
 
                         <div className="text-right min-w-[80px]">
-                          <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-gray-700'}`}>
                             {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
                           </p>
                         </div>

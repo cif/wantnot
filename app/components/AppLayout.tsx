@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useAuth } from '~/contexts/AuthContext';
-import { CreditCard, FolderOpen, Briefcase, LogOut, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { CreditCard, FolderOpen, Briefcase, LogOut, ChevronLeft, ChevronRight, Menu, X, LayoutDashboard } from 'lucide-react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -14,7 +14,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Transactions', icon: CreditCard },
+    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/transactions', label: 'Transactions', icon: CreditCard },
     { path: '/categories', label: 'Categories', icon: FolderOpen },
     { path: '/projects', label: 'Projects', icon: Briefcase },
   ];
