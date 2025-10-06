@@ -4,6 +4,8 @@ import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
 import { PlaidLinkButton } from "~/components/PlaidLinkButton";
 import { useState, useEffect } from "react";
+import { formatCurrency, formatMonthYear, formatPercent } from "~/lib/format";
+import { AlertCircle } from "lucide-react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -42,7 +44,13 @@ function AuthenticatedHome() {
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const [accountsRes, transactionsRes, categoriesRes, projectsRes, budgetRes] = await Promise.all([
+      // Calculate current and prior month
+      const now = new Date();
+      const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+      const priorMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+      const priorMonth = `${priorMonthDate.getUTCFullYear()}-${String(priorMonthDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+      const [accountsRes, transactionsRes, categoriesRes, projectsRes, currentBudgetRes, priorBudgetRes] = await Promise.all([
         fetch('/api/accounts', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
@@ -55,7 +63,10 @@ function AuthenticatedHome() {
         fetch('/api/projects', {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
-        fetch('/api/budget/summary', {
+        fetch(`/api/budget/summary?month=${currentMonth}`, {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }),
+        fetch(`/api/budget/summary?month=${priorMonth}`, {
           headers: { 'Authorization': `Bearer ${idToken}` },
         }),
       ]);
@@ -80,9 +91,56 @@ function AuthenticatedHome() {
         setProjects(data.projects || []);
       }
 
-      if (budgetRes.ok) {
-        const data = await budgetRes.json();
-        setBudgetSummary(data);
+      if (currentBudgetRes.ok && priorBudgetRes.ok) {
+        const currentData = await currentBudgetRes.json();
+        const priorData = await priorBudgetRes.json();
+
+        // Merge the two months' data
+        const allCategoryIds = new Set([
+          ...currentData.summary.map((s: any) => s.categoryId),
+          ...priorData.summary.map((s: any) => s.categoryId),
+        ]);
+
+        const mergedSummary = Array.from(allCategoryIds).map(categoryId => {
+          const current = currentData.summary.find((s: any) => s.categoryId === categoryId);
+          const prior = priorData.summary.find((s: any) => s.categoryId === categoryId);
+
+          return {
+            categoryId,
+            categoryName: current?.categoryName || prior?.categoryName || 'Uncategorized',
+            categoryColor: current?.categoryColor || prior?.categoryColor || '#6B7280',
+            budgetLimit: current?.budgetLimit || prior?.budgetLimit || null,
+            spent: current?.spent || 0,
+            priorSpent: prior?.spent || 0,
+            transactionCount: current?.transactionCount || 0,
+            percentOfBudget: current?.percentOfBudget || null,
+          };
+        }).sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+        const totalPriorSpent = priorData.totals.spent;
+        const totalSpent = currentData.totals.spent;
+        const change = totalPriorSpent > 0 ? ((totalSpent - totalPriorSpent) / totalPriorSpent) * 100 : 0;
+
+        setBudgetSummary({
+          month: currentData.month,
+          priorMonth: priorData.month,
+          startDate: currentData.startDate,
+          endDate: currentData.endDate,
+          priorStartDate: priorData.startDate,
+          priorEndDate: priorData.endDate,
+          summary: mergedSummary,
+          totals: {
+            spent: totalSpent,
+            priorSpent: totalPriorSpent,
+            budgeted: currentData.totals.budgeted,
+            unbudgeted: currentData.totals.unbudgeted,
+            priorBudgeted: priorData.totals.budgeted,
+            priorUnbudgeted: priorData.totals.unbudgeted,
+            change,
+            budget: currentData.totals.budget,
+            percentOfBudget: currentData.totals.percentOfBudget,
+          },
+        });
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -303,7 +361,7 @@ function AuthenticatedHome() {
                 </div>
                 {account.currentBalance && (
                   <p className="text-2xl font-bold text-gray-900 mt-4">
-                    ${parseFloat(account.currentBalance).toFixed(2)}
+                    {formatCurrency(account.currentBalance)}
                   </p>
                 )}
               </div>
@@ -318,7 +376,7 @@ function AuthenticatedHome() {
           <div className="mb-4">
             <h2 className="text-2xl font-semibold text-gray-900">Budget Summary</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Spending by category for {new Date(budgetSummary.startDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              Spending by category for {formatMonthYear(budgetSummary.startDate)}
             </p>
           </div>
 
@@ -326,22 +384,17 @@ function AuthenticatedHome() {
             {/* Totals */}
             <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-gray-200">
               <div>
-                <p className="text-sm text-gray-600 mb-1">This Month</p>
-                <p className="text-3xl font-bold text-gray-900">
-                  ${budgetSummary.totals.spent.toFixed(2)}
-                </p>
-                {budgetSummary.totals.budget && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {budgetSummary.totals.percentOfBudget.toFixed(0)}% of ${budgetSummary.totals.budget.toFixed(2)} budget
-                  </p>
-                )}
-              </div>
-              <div>
                 <p className="text-sm text-gray-600 mb-1">Last Month</p>
                 <p className="text-3xl font-bold text-gray-500">
-                  ${budgetSummary.totals.priorSpent.toFixed(2)}
+                  {formatCurrency(budgetSummary.totals.priorSpent)}
                 </p>
-                {budgetSummary.totals.change !== 0 && (
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">This Month</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {formatCurrency(budgetSummary.totals.spent)}
+                </p>
+                {budgetSummary.totals.change != null && budgetSummary.totals.change !== 0 && (
                   <p className={`text-xs mt-1 ${budgetSummary.totals.change > 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {budgetSummary.totals.change > 0 ? '+' : ''}{budgetSummary.totals.change.toFixed(1)}% vs last month
                   </p>
@@ -350,52 +403,128 @@ function AuthenticatedHome() {
             </div>
 
             {/* Category Breakdown */}
-            <div className="space-y-4">
-              {budgetSummary.summary.map((item: any) => (
-                <div key={item.categoryId || 'uncategorized'}>
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex items-center gap-2 flex-1">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5"
-                        style={{ backgroundColor: item.categoryColor }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm">{item.categoryName}</p>
+            <div className="divide-y divide-gray-200">
+              {budgetSummary.summary
+                .filter((item: any) => item.budgetLimit)
+                .map((item: any, index: number, array: any[]) => {
+                  const priorPercent = (item.priorSpent / parseFloat(item.budgetLimit)) * 100;
+
+                  return (
+                    <div key={item.categoryId || 'uncategorized'} className={index === 0 ? 'pb-4' : 'py-4'}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: item.categoryColor }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 text-sm">{item.categoryName}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right ml-4 flex-shrink-0">
-                      <p className="font-semibold text-gray-900 text-sm">
-                        ${item.spent.toFixed(2)}
-                      </p>
-                      {item.priorSpent > 0 && (
-                        <p className="text-xs text-gray-500">
-                          ${item.priorSpent.toFixed(2)} prior
+
+                      {/* Side by side progress bars */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Prior Month */}
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Last Month: {formatCurrency(item.priorSpent)}</p>
+                          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all opacity-50"
+                              style={{
+                                width: `${Math.min(priorPercent, 100)}%`,
+                                backgroundColor: item.categoryColor
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Current Month */}
+                        <div>
+                          <p className="text-xs text-gray-900 font-medium mb-1">This Month: {formatCurrency(item.spent)}</p>
+                          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(item.percentOfBudget || 0, 100)}%`,
+                                backgroundColor: item.categoryColor
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {item.percentOfBudget > 100 ? (
+                        <div className="flex items-center gap-1 mt-1">
+                          <AlertCircle className="w-3 h-3 text-red-600 flex-shrink-0" />
+                          <p className="text-xs text-red-600">
+                            {formatCurrency(item.spent - parseFloat(item.budgetLimit))} over budget
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs mt-1 text-gray-500">
+                          {formatPercent(item.percentOfBudget || 0)} of {formatCurrency(item.budgetLimit)} budget
                         </p>
                       )}
                     </div>
+                  );
+                })}
+            </div>
+
+            {/* Total Progress Bars */}
+            {budgetSummary.totals.budget && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">Total Budget</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Prior Month Total */}
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">
+                      {formatCurrency(budgetSummary.totals.priorBudgeted || 0)}
+                      {budgetSummary.totals.priorUnbudgeted > 0 && (
+                        <span className="text-gray-400"> (+{formatCurrency(budgetSummary.totals.priorUnbudgeted)}, unbudgeted)</span>
+                      )}
+                    </p>
+                    <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gray-400 opacity-50 transition-all"
+                        style={{
+                          width: `${Math.min((budgetSummary.totals.priorSpent / budgetSummary.totals.budget) * 100, 100)}%`
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Progress bar for budget */}
-                  {item.budgetLimit && (
-                    <div className="mt-1">
-                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            item.percentOfBudget > 100 ? 'bg-red-500' :
-                            item.percentOfBudget > 80 ? 'bg-yellow-500' :
-                            'bg-[#41A6AC]'
-                          }`}
-                          style={{ width: `${Math.min(item.percentOfBudget, 100)}%` }}
-                        />
-                      </div>
-                      <p className={`text-xs mt-1 ${item.percentOfBudget > 100 ? 'text-red-600' : 'text-gray-500'}`}>
-                        {item.percentOfBudget.toFixed(0)}% of ${item.budgetLimit.toFixed(2)} budget
-                      </p>
+                  {/* Current Month Total */}
+                  <div>
+                    <p className="text-xs text-gray-900 font-medium mb-1">
+                      {formatCurrency(budgetSummary.totals.budgeted || 0)}
+                      {budgetSummary.totals.unbudgeted > 0 && (
+                        <span className="text-gray-600"> (+{formatCurrency(budgetSummary.totals.unbudgeted)}, unbudgeted)</span>
+                      )}
+                    </p>
+                    <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          budgetSummary.totals.percentOfBudget > 100 ? 'bg-red-500' :
+                          budgetSummary.totals.percentOfBudget > 80 ? 'bg-yellow-500' :
+                          'bg-[#41A6AC]'
+                        }`}
+                        style={{
+                          width: `${Math.min(budgetSummary.totals.percentOfBudget, 100)}%`
+                        }}
+                      />
                     </div>
-                  )}
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                <p className={`text-xs mt-1 ${budgetSummary.totals.percentOfBudget > 100 ? 'text-red-600' : 'text-gray-500'}`}>
+                  {formatPercent(budgetSummary.totals.percentOfBudget)} of {formatCurrency(budgetSummary.totals.budget)} total budget
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -464,35 +464,85 @@ function CategoriesPage() {
             <p className="text-gray-600">No categories yet. Create your first one below!</p>
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                to={`/categories/${category.id}`}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: category.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 truncate group-hover:text-[#41A6AC] transition-colors">
-                      {category.name}
-                    </h3>
-                    {category.budgetLimit && (
-                      <p className="text-sm text-gray-600">
-                        ${parseFloat(category.budgetLimit).toFixed(2)}/mo
-                      </p>
-                    )}
-                  </div>
-                  <svg className="w-5 h-5 text-gray-400 group-hover:text-[#41A6AC] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+          <>
+            {/* Expense Categories */}
+            {categories.filter(c => !c.isIncome).length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Expense Categories</h3>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {categories
+                    .filter(c => !c.isIncome)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((category) => (
+                      <Link
+                        key={category.id}
+                        to={`/categories/${category.id}`}
+                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate group-hover:text-[#41A6AC] transition-colors">
+                              {category.name}
+                            </h3>
+                            {category.budgetLimit && (
+                              <p className="text-sm text-gray-600">
+                                ${parseFloat(category.budgetLimit).toFixed(2)}/mo
+                              </p>
+                            )}
+                          </div>
+                          <svg className="w-5 h-5 text-gray-400 group-hover:text-[#41A6AC] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </Link>
+                    ))}
                 </div>
-              </Link>
-            ))}
-          </div>
+              </div>
+            )}
+
+            {/* Income Categories */}
+            {categories.filter(c => c.isIncome).length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Income Categories</h3>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {categories
+                    .filter(c => c.isIncome)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((category) => (
+                      <Link
+                        key={category.id}
+                        to={`/categories/${category.id}`}
+                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate group-hover:text-[#41A6AC] transition-colors">
+                              {category.name}
+                            </h3>
+                            {category.budgetLimit && (
+                              <p className="text-sm text-gray-600">
+                                ${parseFloat(category.budgetLimit).toFixed(2)}/mo
+                              </p>
+                            )}
+                          </div>
+                          <svg className="w-5 h-5 text-gray-400 group-hover:text-[#41A6AC] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

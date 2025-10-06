@@ -81,7 +81,7 @@ function TransactionsPage() {
     const options = new Set<string>();
     transactions.forEach(txn => {
       const date = new Date(txn.date);
-      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
       options.add(monthYear);
     });
     return Array.from(options).sort().reverse(); // Most recent first
@@ -100,7 +100,7 @@ function TransactionsPage() {
 
     return transactions.filter(txn => {
       const date = new Date(txn.date);
-      const txnMonthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const txnMonthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
       return txnMonthYear === selectedMonthYear;
     });
   }, [transactions, selectedMonthYear]);
