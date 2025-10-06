@@ -3,6 +3,8 @@ import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
 import { PlaidLinkButton } from "~/components/PlaidLinkButton";
+import { TransactionCategorySelect } from "~/components/TransactionCategorySelect";
+import { TransactionProjectSelect } from "~/components/TransactionProjectSelect";
 import { useState, useEffect } from "react";
 import { formatCurrency, formatMonthYear, formatPercent } from "~/lib/format";
 import { AlertCircle } from "lucide-react";
@@ -592,58 +594,19 @@ function AuthenticatedHome() {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <select
-                            value={txn.categoryId || ''}
-                            onChange={(e) => handleCategorize(txn.id, e.target.value || null)}
-                            disabled={categorizingId === txn.id}
-                            className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 pr-8"
-                          >
-                            <option value="">Uncategorized</option>
-                            {categories
-                              .filter(cat => {
-                                const isIncome = parseFloat(txn.amount) < 0;
-                                return cat.isIncome === isIncome;
-                              })
-                              .map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                  {cat.name}
-                                </option>
-                              ))}
-                          </select>
-                          {categorizingId === txn.id && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                              <svg className="animate-spin h-4 w-4 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            </div>
-                          )}
-                        </div>
+                        <TransactionCategorySelect
+                          transaction={txn}
+                          categories={categories}
+                          onCategorize={handleCategorize}
+                          isLoading={categorizingId === txn.id}
+                        />
 
-                        <div className="relative">
-                          <select
-                            value={txn.projectId || ''}
-                            onChange={(e) => handleTagProject(txn.id, e.target.value || null)}
-                            disabled={taggingProjectId === txn.id}
-                            className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 pr-8"
-                          >
-                            <option value="">No project</option>
-                            {projects.map((proj) => (
-                              <option key={proj.id} value={proj.id}>
-                                {proj.name}
-                              </option>
-                            ))}
-                          </select>
-                          {taggingProjectId === txn.id && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                              <svg className="animate-spin h-4 w-4 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            </div>
-                          )}
-                        </div>
+                        <TransactionProjectSelect
+                          transaction={txn}
+                          projects={projects}
+                          onTagProject={handleTagProject}
+                          isLoading={taggingProjectId === txn.id}
+                        />
 
                         <div className="text-right min-w-[80px]">
                           <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-gray-700'}`}>

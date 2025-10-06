@@ -19,14 +19,13 @@ export async function loader({ request }: { request: Request }) {
     }
 
     // Get user's transactions, ordered by date (most recent first)
-    // Filter out hidden and pending transactions
+    // Include pending transactions but filter out hidden ones
     const userTransactions = await db
       .select()
       .from(transactions)
       .where(and(
         eq(transactions.userId, user.id),
-        eq(transactions.isHidden, false),
-        eq(transactions.pending, false)
+        eq(transactions.isHidden, false)
       ))
       .orderBy(desc(transactions.date))
       .limit(100); // Limit to most recent 100 transactions

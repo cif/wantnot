@@ -2,6 +2,8 @@ import type { Route } from "./+types/transactions";
 import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
+import { TransactionCategorySelect } from "~/components/TransactionCategorySelect";
+import { TransactionProjectSelect } from "~/components/TransactionProjectSelect";
 import { useState, useEffect, useMemo } from "react";
 
 export function meta({}: Route.MetaArgs) {
@@ -185,15 +187,33 @@ function TransactionsPage() {
 
   // Calculate totals for the selected month
   const monthTotals = useMemo(() => {
-    const income = filteredTransactions
+    const posted = filteredTransactions.filter(txn => !txn.pending);
+    const pending = filteredTransactions.filter(txn => txn.pending);
+
+    const income = posted
       .filter(txn => parseFloat(txn.amount) < 0)
       .reduce((sum, txn) => sum + Math.abs(parseFloat(txn.amount)), 0);
 
-    const expenses = filteredTransactions
+    const expenses = posted
       .filter(txn => parseFloat(txn.amount) > 0)
       .reduce((sum, txn) => sum + parseFloat(txn.amount), 0);
 
-    return { income, expenses, net: income - expenses };
+    const pendingIncome = pending
+      .filter(txn => parseFloat(txn.amount) < 0)
+      .reduce((sum, txn) => sum + Math.abs(parseFloat(txn.amount)), 0);
+
+    const pendingExpenses = pending
+      .filter(txn => parseFloat(txn.amount) > 0)
+      .reduce((sum, txn) => sum + parseFloat(txn.amount), 0);
+
+    return {
+      income,
+      expenses,
+      net: income - expenses,
+      pendingIncome,
+      pendingExpenses,
+      hasPending: pending.length > 0
+    };
   }, [filteredTransactions]);
 
   return (
@@ -239,16 +259,28 @@ function TransactionsPage() {
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
           <p className="text-xs text-gray-600 mb-1">Income</p>
           <p className="text-lg font-bold text-green-600">+${monthTotals.income.toFixed(2)}</p>
+          {monthTotals.hasPending && monthTotals.pendingIncome > 0 && (
+            <p className="text-xs text-yellow-600 mt-0.5">+${monthTotals.pendingIncome.toFixed(2)} pending</p>
+          )}
         </div>
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
           <p className="text-xs text-gray-600 mb-1">Expenses</p>
           <p className="text-lg font-bold text-gray-700">-${monthTotals.expenses.toFixed(2)}</p>
+          {monthTotals.hasPending && monthTotals.pendingExpenses > 0 && (
+            <p className="text-xs text-yellow-600 mt-0.5">-${monthTotals.pendingExpenses.toFixed(2)} pending</p>
+          )}
         </div>
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
           <p className="text-xs text-gray-600 mb-1">Net</p>
           <p className={`text-lg font-bold ${monthTotals.net >= 0 ? 'text-green-600' : 'text-gray-700'}`}>
             {monthTotals.net >= 0 ? '+' : '-'}${Math.abs(monthTotals.net).toFixed(2)}
           </p>
+          {monthTotals.hasPending && (
+            <p className="text-xs text-yellow-600 mt-0.5">
+              {(monthTotals.pendingIncome - monthTotals.pendingExpenses) >= 0 ? '+' : '-'}
+              ${Math.abs(monthTotals.pendingIncome - monthTotals.pendingExpenses).toFixed(2)} pending
+            </p>
+          )}
         </div>
       </div>
 
@@ -270,14 +302,20 @@ function TransactionsPage() {
                 <div key={txn.id} className="p-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center gap-3">
                     {/* Date */}
-                    <div className="w-14 flex-shrink-0">
+                    <div
+                      className="w-14 flex-shrink-0 cursor-pointer"
+                      onClick={() => window.location.href = `/transactions/${txn.id}`}
+                    >
                       <p className="text-xs font-medium text-gray-900">
                         {new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
                     </div>
 
                     {/* Transaction Info */}
-                    <div className="flex-1 min-w-0">
+                    <div
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => window.location.href = `/transactions/${txn.id}`}
+                    >
                       <p className="text-sm font-medium text-gray-900 truncate">
                         {txn.merchantName || txn.name}
                       </p>
@@ -310,57 +348,22 @@ function TransactionsPage() {
 
                     {/* Category Dropdown */}
                     <div className="relative w-32 flex-shrink-0">
-                      <select
-                        value={txn.categoryId || ''}
-                        onChange={(e) => handleCategorize(txn.id, e.target.value || null)}
-                        disabled={categorizingId === txn.id}
-                        className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
-                      >
-                        <option value="">Uncategorized</option>
-                        {categories
-                          .filter(cat => {
-                            const isIncome = parseFloat(txn.amount) < 0;
-                            return cat.isIncome === isIncome;
-                          })
-                          .map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </option>
-                          ))}
-                      </select>
-                      {categorizingId === txn.id && (
-                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <svg className="animate-spin h-3 w-3 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        </div>
-                      )}
+                      <TransactionCategorySelect
+                        transaction={txn}
+                        categories={categories}
+                        onCategorize={handleCategorize}
+                        isLoading={categorizingId === txn.id}
+                      />
                     </div>
 
                     {/* Project Dropdown */}
                     <div className="relative w-28 flex-shrink-0">
-                      <select
-                        value={txn.projectId || ''}
-                        onChange={(e) => handleTagProject(txn.id, e.target.value || null)}
-                        disabled={taggingProjectId === txn.id}
-                        className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
-                      >
-                        <option value="">No project</option>
-                        {projects.map((proj) => (
-                          <option key={proj.id} value={proj.id}>
-                            {proj.name}
-                          </option>
-                        ))}
-                      </select>
-                      {taggingProjectId === txn.id && (
-                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <svg className="animate-spin h-3 w-3 text-[#41A6AC]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        </div>
-                      )}
+                      <TransactionProjectSelect
+                        transaction={txn}
+                        projects={projects}
+                        onTagProject={handleTagProject}
+                        isLoading={taggingProjectId === txn.id}
+                      />
                     </div>
 
                     {/* Amount */}

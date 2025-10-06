@@ -3,6 +3,7 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 export default [
   index("routes/home.tsx"),
   route("transactions", "routes/transactions.tsx"),
+  route("transactions/:id", "routes/transactions.$id.tsx"),
   route("categories", "routes/categories.tsx"),
   route("categories/:id", "routes/categories.$id.tsx"),
   route("projects", "routes/projects.tsx"),
@@ -15,6 +16,7 @@ export default [
   route("api/transactions", "routes/api.transactions.ts"),
   route("api/transactions/uncategorized", "routes/api.transactions.uncategorized.ts"),
   route("api/transactions/bulk-categorize", "routes/api.transactions.bulk-categorize.ts"),
+  route("api/transactions/:id", "routes/api.transactions.$id.ts"),
   route("api/transactions/:id/categorize", "routes/api.transactions.$id.categorize.ts"),
   route("api/transactions/:id/tag-project", "routes/api.transactions.$id.tag-project.ts"),
   route("api/categories", "routes/api.categories.ts"),
