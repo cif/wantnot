@@ -2,7 +2,7 @@ import type { Route } from "./+types/categories.$id";
 import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { Edit2, Trash2, ArrowLeft } from "lucide-react";
 
@@ -34,6 +34,7 @@ function CategoryDetailPage() {
   const [formData, setFormData] = useState({ name: '', budgetLimit: '', color: '#41A6AC', isIncome: false });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedMonthYear, setSelectedMonthYear] = useState<string>('');
 
   const fetchCategory = async () => {
     try {
@@ -90,6 +91,50 @@ function CategoryDetailPage() {
     fetchCategory();
     fetchTransactions();
   }, [id]);
+
+  // Generate available month/year options from transactions
+  const monthYearOptions = useMemo(() => {
+    const options = new Set<string>();
+    transactions.forEach(txn => {
+      const date = new Date(txn.date);
+      const monthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      options.add(monthYear);
+    });
+    return Array.from(options).sort().reverse(); // Most recent first
+  }, [transactions]);
+
+  // Set default to most recent month if not set
+  useEffect(() => {
+    if (!selectedMonthYear && monthYearOptions.length > 0) {
+      setSelectedMonthYear(monthYearOptions[0]);
+    }
+  }, [monthYearOptions]);
+
+  // Filter transactions by selected month/year
+  const filteredTransactions = useMemo(() => {
+    if (!selectedMonthYear) return transactions;
+
+    return transactions.filter(txn => {
+      const date = new Date(txn.date);
+      const txnMonthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      return txnMonthYear === selectedMonthYear;
+    });
+  }, [transactions, selectedMonthYear]);
+
+  // Format month/year for display
+  const formatMonthYear = (monthYear: string) => {
+    if (!monthYear) return '';
+    const [year, month] = monthYear.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  // Calculate monthly totals
+  const monthlyTotal = useMemo(() => {
+    const posted = filteredTransactions.filter(txn => !txn.pending);
+    const total = posted.reduce((sum, txn) => sum + Math.abs(parseFloat(txn.amount)), 0);
+    return total;
+  }, [filteredTransactions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +223,20 @@ function CategoryDetailPage() {
             />
             <h1 className="text-3xl font-bold text-gray-900">{category.name}</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {monthYearOptions.length > 0 && (
+              <select
+                value={selectedMonthYear}
+                onChange={(e) => setSelectedMonthYear(e.target.value)}
+                className="px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent"
+              >
+                {monthYearOptions.map(monthYear => (
+                  <option key={monthYear} value={monthYear}>
+                    {formatMonthYear(monthYear)}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => setEditing(!editing)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -195,10 +253,64 @@ function CategoryDetailPage() {
             </button>
           </div>
         </div>
-        {category.budgetLimit && (
-          <p className="text-gray-600 mt-2">
-            Monthly Budget: ${parseFloat(category.budgetLimit).toFixed(2)}
-          </p>
+
+        {/* Monthly Budget Information */}
+        {selectedMonthYear && (
+          <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">
+                  {formatMonthYear(selectedMonthYear)} Spending
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  ${monthlyTotal.toFixed(2)}
+                </p>
+              </div>
+              {category.budgetLimit && (
+                <div className="text-right">
+                  <p className="text-sm text-gray-600 mb-1">Monthly Budget</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ${parseFloat(category.budgetLimit).toFixed(2)}
+                  </p>
+                </div>
+              )}
+            </div>
+            {category.budgetLimit && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="text-gray-600">Budget Progress</span>
+                  <span className={`font-medium ${
+                    monthlyTotal > parseFloat(category.budgetLimit) ? 'text-red-600' : 'text-green-600'
+                  }`}>
+                    {((monthlyTotal / parseFloat(category.budgetLimit)) * 100).toFixed(1)}%
+                    {monthlyTotal > parseFloat(category.budgetLimit) ? ' over' : ' used'}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      monthlyTotal > parseFloat(category.budgetLimit)
+                        ? 'bg-red-500'
+                        : 'bg-[#41A6AC]'
+                    }`}
+                    style={{
+                      width: `${Math.min((monthlyTotal / parseFloat(category.budgetLimit)) * 100, 100)}%`
+                    }}
+                  />
+                </div>
+                {monthlyTotal > parseFloat(category.budgetLimit) && (
+                  <p className="text-sm text-red-600 mt-2">
+                    ${(monthlyTotal - parseFloat(category.budgetLimit)).toFixed(2)} over budget
+                  </p>
+                )}
+                {monthlyTotal <= parseFloat(category.budgetLimit) && (
+                  <p className="text-sm text-green-600 mt-2">
+                    ${(parseFloat(category.budgetLimit) - monthlyTotal).toFixed(2)} remaining
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -292,19 +404,24 @@ function CategoryDetailPage() {
       {/* Transactions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Transactions in this category</h2>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Transactions {selectedMonthYear ? `for ${formatMonthYear(selectedMonthYear)}` : 'in this category'}
+          </h2>
           <p className="text-sm text-gray-600 mt-1">
-            {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
+            {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
+            {selectedMonthYear && transactions.length > filteredTransactions.length && (
+              <span className="text-gray-500"> ({transactions.length} total)</span>
+            )}
           </p>
         </div>
 
-        {transactions.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center text-gray-600">
-            No transactions in this category yet. Transactions will appear here once they are categorized.
+            No transactions in this category for this period.
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {transactions.map((txn) => (
+            {filteredTransactions.map((txn) => (
               <div key={txn.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
