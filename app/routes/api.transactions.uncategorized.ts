@@ -1,9 +1,9 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
 import { db, transactions } from '~/db';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, desc } from 'drizzle-orm';
 
-// GET - Get all uncategorized transactions
+// GET - Get ALL uncategorized transactions (ignoring month filter)
 export async function loader({ request }: { request: Request }) {
   try {
     const firebaseUser = await authenticateRequest(request);
@@ -13,6 +13,7 @@ export async function loader({ request }: { request: Request }) {
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Get ALL uncategorized transactions, not just recent 100
     const uncategorized = await db
       .select()
       .from(transactions)
@@ -20,9 +21,10 @@ export async function loader({ request }: { request: Request }) {
         eq(transactions.userId, user.id),
         isNull(transactions.categoryId),
         eq(transactions.isHidden, false),
-        eq(transactions.pending, false)
+        eq(transactions.pending, false),
+        eq(transactions.isTransfer, false)
       ))
-      .orderBy(transactions.date);
+      .orderBy(desc(transactions.date));
 
     return Response.json({
       transactions: uncategorized,

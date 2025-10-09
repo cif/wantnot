@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { X, Save, Mic, Square } from 'lucide-react';
+import { X, Save, Mic, Square, EyeOff, ArrowLeftRight } from 'lucide-react';
 import { useAuth } from '~/contexts/AuthContext';
 import { ProtectedRoute } from '~/components/ProtectedRoute';
 import { AppLayout } from '~/components/AppLayout';
@@ -24,6 +24,8 @@ function TransactionDetailPage() {
   const [category, setCategory] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
   const [memo, setMemo] = useState('');
+  const [isHidden, setIsHidden] = useState(false);
+  const [isTransfer, setIsTransfer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -95,6 +97,8 @@ function TransactionDetailPage() {
         const data = await txnRes.json();
         setTransaction(data.transaction);
         setMemo(data.transaction.notes || '');
+        setIsHidden(data.transaction.isHidden || false);
+        setIsTransfer(data.transaction.isTransfer || false);
 
         if (categoriesRes.ok) {
           const catData = await categoriesRes.json();
@@ -127,14 +131,18 @@ function TransactionDetailPage() {
           'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ notes: memo }),
+        body: JSON.stringify({
+          notes: memo,
+          isHidden,
+          isTransfer,
+        }),
       });
 
       if (response.ok) {
         navigate('/transactions');
       }
     } catch (error) {
-      console.error('Error saving memo:', error);
+      console.error('Error saving transaction:', error);
     } finally {
       setSaving(false);
     }
@@ -241,6 +249,48 @@ function TransactionDetailPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Transaction Flags */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Transaction Settings</h3>
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={isTransfer}
+              onChange={(e) => setIsTransfer(e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-[#41A6AC] focus:ring-[#41A6AC] border-gray-300 rounded"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-900">Mark as Transfer</span>
+              </div>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Excludes this transaction from income/expense calculations (e.g., moving money between accounts)
+              </p>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={isHidden}
+              onChange={(e) => setIsHidden(e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-[#41A6AC] focus:ring-[#41A6AC] border-gray-300 rounded"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-900">Hide from Reports</span>
+              </div>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Completely hides this transaction from all lists and reports
+              </p>
+            </div>
+          </label>
         </div>
       </div>
 

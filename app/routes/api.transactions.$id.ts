@@ -44,14 +44,19 @@ export async function action({ request, params }: { request: Request; params: { 
     }
 
     const body = await request.json();
-    const { notes } = body;
+    const { notes, isHidden, isTransfer } = body;
+
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (notes !== undefined) updateData.notes = notes;
+    if (isHidden !== undefined) updateData.isHidden = isHidden;
+    if (isTransfer !== undefined) updateData.isTransfer = isTransfer;
 
     const updated = await db
       .update(transactions)
-      .set({
-        notes,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(and(
         eq(transactions.id, params.id),
         eq(transactions.userId, user.id)

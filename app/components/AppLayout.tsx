@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useAuth } from '~/contexts/AuthContext';
 import { CreditCard, FolderOpen, Briefcase, LogOut, ChevronLeft, ChevronRight, Menu, X, LayoutDashboard } from 'lucide-react';
@@ -10,17 +10,52 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { user, logout } = useAuth();
+  const [uncategorizedCount, setUncategorizedCount] = useState(0);
+  const { user, logout, getIdToken } = useAuth();
   const location = useLocation();
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/transactions', label: 'Transactions', icon: CreditCard },
+    { path: '/transactions', label: 'Transactions', icon: CreditCard, badge: uncategorizedCount },
     { path: '/categories', label: 'Categories', icon: FolderOpen },
     { path: '/projects', label: 'Projects', icon: Briefcase },
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  // Fetch uncategorized count
+  useEffect(() => {
+    const fetchUncategorizedCount = async () => {
+      try {
+        const idToken = await getIdToken();
+        if (!idToken) return;
+
+        const response = await fetch('/api/transactions/uncategorized', {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUncategorizedCount(data.count || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching uncategorized count:', error);
+      }
+    };
+
+    fetchUncategorizedCount();
+    // Refresh every 3 seconds for more responsive badge updates
+    const interval = setInterval(fetchUncategorizedCount, 3000);
+
+    // Listen for custom events to refresh immediately
+    const handleRefresh = () => fetchUncategorizedCount();
+    window.addEventListener('transaction-updated', handleRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('transaction-updated', handleRefresh);
+    };
+  }, [getIdToken, location.pathname]); // Also refresh when location changes
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -79,20 +114,37 @@ export function AppLayout({ children }: AppLayoutProps) {
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
+                const showBadge = item.badge && item.badge > 0;
                 return (
                   <li key={item.path}>
                     <Link
                       to={item.path}
                       onClick={() => setIsMobileOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors relative ${
                         isActive(item.path)
                           ? 'bg-[#41A6AC] text-white'
                           : 'text-gray-700 hover:bg-gray-100'
                       } ${isCollapsed ? 'justify-center' : ''}`}
                       title={isCollapsed ? item.label : ''}
                     >
-                      <Icon className="w-5 h-5 flex-shrink-0" />
-                      {!isCollapsed && <span className="font-medium text-sm">{item.label}</span>}
+                      <div className="relative">
+                        <Icon className="w-5 h-5 flex-shrink-0" />
+                        {showBadge && isCollapsed && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
+                        )}
+                      </div>
+                      {!isCollapsed && (
+                        <span className="font-medium text-sm flex-1">{item.label}</span>
+                      )}
+                      {showBadge && !isCollapsed && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          isActive(item.path)
+                            ? 'bg-white/20 text-white'
+                            : 'bg-red-500 text-white'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );

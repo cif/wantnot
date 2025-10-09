@@ -80,6 +80,7 @@ export const transactions = pgTable('transactions', {
   // User notes and custom fields
   notes: text('notes'),
   isHidden: boolean('is_hidden').default(false).notNull(),
+  isTransfer: boolean('is_transfer').default(false).notNull(),
   // Auto-categorization metadata
   autoCategorizationMethod: text('auto_categorization_method'), // 'rule' | 'vector' | 'llm' | 'manual' | 'ai' | null
   autoCategorizationConfidence: real('auto_categorization_confidence'), // 0.0 - 1.0

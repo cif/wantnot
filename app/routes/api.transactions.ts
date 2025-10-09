@@ -28,7 +28,7 @@ export async function loader({ request }: { request: Request }) {
         eq(transactions.isHidden, false)
       ))
       .orderBy(desc(transactions.date))
-      .limit(100); // Limit to most recent 100 transactions
+      .limit(500); // Limit to most recent 500 transactions (increased for better month coverage)
 
     return Response.json({ transactions: userTransactions });
   } catch (error) {

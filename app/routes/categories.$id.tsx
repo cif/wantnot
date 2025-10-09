@@ -110,15 +110,19 @@ function CategoryDetailPage() {
     }
   }, [monthYearOptions]);
 
-  // Filter transactions by selected month/year
+  // Filter transactions by selected month/year and exclude hidden transactions
   const filteredTransactions = useMemo(() => {
-    if (!selectedMonthYear) return transactions;
+    let filtered = transactions.filter(txn => !txn.isHidden); // Always exclude hidden
 
-    return transactions.filter(txn => {
-      const date = new Date(txn.date);
-      const txnMonthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-      return txnMonthYear === selectedMonthYear;
-    });
+    if (selectedMonthYear) {
+      filtered = filtered.filter(txn => {
+        const date = new Date(txn.date);
+        const txnMonthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        return txnMonthYear === selectedMonthYear;
+      });
+    }
+
+    return filtered;
   }, [transactions, selectedMonthYear]);
 
   // Format month/year for display
@@ -129,9 +133,9 @@ function CategoryDetailPage() {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  // Calculate monthly totals
+  // Calculate monthly totals (excluding transfers)
   const monthlyTotal = useMemo(() => {
-    const posted = filteredTransactions.filter(txn => !txn.pending);
+    const posted = filteredTransactions.filter(txn => !txn.pending && !txn.isTransfer);
     const total = posted.reduce((sum, txn) => sum + Math.abs(parseFloat(txn.amount)), 0);
     return total;
   }, [filteredTransactions]);

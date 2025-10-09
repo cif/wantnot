@@ -6,8 +6,9 @@ import { PlaidLinkButton } from "~/components/PlaidLinkButton";
 import { TransactionCategorySelect } from "~/components/TransactionCategorySelect";
 import { TransactionProjectSelect } from "~/components/TransactionProjectSelect";
 import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import { formatCurrency, formatMonthYear, formatPercent } from "~/lib/format";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CreditCard } from "lucide-react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -531,119 +532,50 @@ function AuthenticatedHome() {
         </div>
       )}
 
-      {/* Uncategorized Transactions */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900">Needs Categorization</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {transactions.filter(txn => !txn.categoryId).length} uncategorized transaction{transactions.filter(txn => !txn.categoryId).length !== 1 ? 's' : ''}
-            </p>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link
+          to="/transactions"
+          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:border-[#41A6AC] transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Transactions</h3>
+              <p className="text-sm text-gray-600">
+                {transactions.filter(txn => !txn.categoryId && !txn.isHidden && !txn.pending && !txn.isTransfer).length > 0 ? (
+                  <span>
+                    <span className="font-semibold text-[#41A6AC]">
+                      {transactions.filter(txn => !txn.categoryId && !txn.isHidden && !txn.pending && !txn.isTransfer).length}
+                    </span> need categorization
+                  </span>
+                ) : (
+                  'All caught up!'
+                )}
+              </p>
+            </div>
+            <CreditCard className="w-8 h-8 text-[#41A6AC]" />
           </div>
-          <button
-            onClick={handleRefreshTransactions}
-            disabled={refreshing || accounts.length === 0}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        </Link>
+
+        <button
+          onClick={handleRefreshTransactions}
+          disabled={refreshing || accounts.length === 0}
+          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:border-[#41A6AC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                {refreshing ? 'Syncing...' : 'Sync Transactions'}
+              </h3>
+              <p className="text-sm text-gray-600">
+                Refresh from connected accounts
+              </p>
+            </div>
+            <svg className={`w-8 h-8 text-[#41A6AC] ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-gray-600">Loading...</div>
-        ) : transactions.filter(txn => !txn.categoryId).length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-            <svg className="w-12 h-12 text-green-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-gray-900 font-semibold mb-1">All caught up!</p>
-            <p className="text-gray-600 text-sm">All your transactions have been categorized.</p>
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="divide-y divide-gray-200">
-              {transactions.filter(txn => !txn.categoryId).map((txn) => {
-                const category = categories.find(c => c.id === txn.categoryId);
-                const project = projects.find(p => p.id === txn.projectId);
-                return (
-                  <div key={txn.id} className="p-4 hover:bg-gray-50">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900">{txn.merchantName || txn.name}</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          <p className="text-sm text-gray-500">
-                            {new Date(txn.date).toLocaleDateString()}
-                          </p>
-                          {txn.pending && (
-                            <span className="text-xs px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded">
-                              Pending
-                            </span>
-                          )}
-                          {txn.autoCategorizationMethod && txn.autoCategorizationMethod !== 'manual' && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
-                              Auto: {txn.autoCategorizationMethod}
-                              {txn.autoCategorizationConfidence &&
-                                ` (${Math.round(txn.autoCategorizationConfidence * 100)}%)`
-                              }
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <TransactionCategorySelect
-                          transaction={txn}
-                          categories={categories}
-                          onCategorize={handleCategorize}
-                          isLoading={categorizingId === txn.id}
-                        />
-
-                        <TransactionProjectSelect
-                          transaction={txn}
-                          projects={projects}
-                          onTagProject={handleTagProject}
-                          isLoading={taggingProjectId === txn.id}
-                        />
-
-                        <div className="text-right min-w-[80px]">
-                          <p className={`font-semibold ${parseFloat(txn.amount) < 0 ? 'text-green-600' : 'text-gray-700'}`}>
-                            {parseFloat(txn.amount) < 0 ? '+' : '-'}${Math.abs(parseFloat(txn.amount)).toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {(category || project) && (
-                      <div className="mt-2 flex items-center gap-4">
-                        {category && (
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: category.color }}
-                            />
-                            <span className="text-xs text-gray-600">{category.name}</span>
-                          </div>
-                        )}
-                        {project && (
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: project.color }}
-                            />
-                            <span className="text-xs text-gray-600">{project.name}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        </button>
       </div>
     </div>
   );
