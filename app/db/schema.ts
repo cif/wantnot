@@ -41,6 +41,7 @@ export const categories = pgTable('categories', {
   budgetLimit: decimal('budget_limit', { precision: 12, scale: 2 }),
   isIncome: boolean('is_income').default(false).notNull(), // true for income categories, false for expense categories
   isDefault: boolean('is_default').default(false).notNull(),
+  sortOrder: integer('sort_order').default(0).notNull(), // user-defined display order
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

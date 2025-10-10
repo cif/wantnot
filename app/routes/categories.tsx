@@ -35,6 +35,8 @@ function CategoriesPage() {
   const [aiSuggestions, setAiSuggestions] = useState<any>(null);
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
   const [applyingBulk, setApplyingBulk] = useState(false);
+  const [draggedCategory, setDraggedCategory] = useState<any>(null);
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
 
   const fetchCategories = async () => {
     try {
@@ -248,6 +250,96 @@ function CategoriesPage() {
   const handleDismissSuggestions = () => {
     setAiSuggestions(null);
     setSelectedSuggestions(new Set());
+  };
+
+  const handleDragStart = (e: React.DragEvent, category: any) => {
+    setDraggedCategory(category);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, categoryId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCategory(categoryId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetCategory: any) => {
+    e.preventDefault();
+    setDragOverCategory(null);
+
+    if (!draggedCategory || draggedCategory.id === targetCategory.id) {
+      setDraggedCategory(null);
+      return;
+    }
+
+    // Separate expense and income categories
+    const expenseCategories = categories.filter(c => !c.isIncome);
+    const incomeCategories = categories.filter(c => c.isIncome);
+
+    // Only allow reordering within the same type
+    if (draggedCategory.isIncome !== targetCategory.isIncome) {
+      setDraggedCategory(null);
+      return;
+    }
+
+    const relevantCategories = draggedCategory.isIncome ? incomeCategories : expenseCategories;
+
+    // Find indices
+    const draggedIndex = relevantCategories.findIndex(c => c.id === draggedCategory.id);
+    const targetIndex = relevantCategories.findIndex(c => c.id === targetCategory.id);
+
+    // Reorder the array
+    const reordered = [...relevantCategories];
+    reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, draggedCategory);
+
+    // Update sort orders
+    const categoryOrders = reordered.map((cat, index) => ({
+      id: cat.id,
+      sortOrder: index,
+    }));
+
+    // Optimistically update UI
+    const newCategories = draggedCategory.isIncome
+      ? [...expenseCategories, ...reordered]
+      : [...reordered, ...incomeCategories];
+
+    setCategories(newCategories);
+    setDraggedCategory(null);
+
+    // Persist to backend
+    try {
+      const idToken = await getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+
+      const response = await fetch('/api/categories/reorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ categoryOrders }),
+      });
+
+      if (!response.ok) throw new Error('Failed to reorder categories');
+
+      // Refresh to get accurate data from server
+      await fetchCategories();
+    } catch (error) {
+      console.error('Error reordering categories:', error);
+      setErrorMessage('Failed to save new order');
+      // Revert on error
+      await fetchCategories();
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCategory(null);
+    setDragOverCategory(null);
   };
 
   return (
@@ -468,18 +560,38 @@ function CategoriesPage() {
             {/* Expense Categories */}
             {categories.filter(c => !c.isIncome).length > 0 && (
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Expense Categories</h3>
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Expense Categories</h3>
+                  <span className="text-xs text-gray-500">(drag to reorder)</span>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {categories
                     .filter(c => !c.isIncome)
-                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((category) => (
-                      <Link
+                      <div
                         key={category.id}
-                        to={`/categories/${category.id}`}
-                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, category)}
+                        onDragOver={(e) => handleDragOver(e, category.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, category)}
+                        onDragEnd={handleDragEnd}
+                        className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 transition-all cursor-move ${
+                          dragOverCategory === category.id ? 'border-[#41A6AC] border-2 scale-105' : ''
+                        } ${draggedCategory?.id === category.id ? 'opacity-50' : ''}`}
                       >
-                        <div className="flex items-center gap-3">
+                        <Link
+                          to={`/categories/${category.id}`}
+                          className="flex items-center gap-3 group"
+                          onClick={(e) => {
+                            if (draggedCategory) {
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
                           <div
                             className="w-3 h-3 rounded-full flex-shrink-0"
                             style={{ backgroundColor: category.color }}
@@ -497,8 +609,8 @@ function CategoriesPage() {
                           <svg className="w-5 h-5 text-gray-400 group-hover:text-[#41A6AC] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
-                        </div>
-                      </Link>
+                        </Link>
+                      </div>
                     ))}
                 </div>
               </div>
@@ -507,18 +619,38 @@ function CategoriesPage() {
             {/* Income Categories */}
             {categories.filter(c => c.isIncome).length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Income Categories</h3>
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Income Categories</h3>
+                  <span className="text-xs text-gray-500">(drag to reorder)</span>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {categories
                     .filter(c => c.isIncome)
-                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((category) => (
-                      <Link
+                      <div
                         key={category.id}
-                        to={`/categories/${category.id}`}
-                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#41A6AC] transition-all group"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, category)}
+                        onDragOver={(e) => handleDragOver(e, category.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, category)}
+                        onDragEnd={handleDragEnd}
+                        className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 transition-all cursor-move ${
+                          dragOverCategory === category.id ? 'border-[#41A6AC] border-2 scale-105' : ''
+                        } ${draggedCategory?.id === category.id ? 'opacity-50' : ''}`}
                       >
-                        <div className="flex items-center gap-3">
+                        <Link
+                          to={`/categories/${category.id}`}
+                          className="flex items-center gap-3 group"
+                          onClick={(e) => {
+                            if (draggedCategory) {
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
                           <div
                             className="w-3 h-3 rounded-full flex-shrink-0"
                             style={{ backgroundColor: category.color }}
@@ -536,8 +668,8 @@ function CategoriesPage() {
                           <svg className="w-5 h-5 text-gray-400 group-hover:text-[#41A6AC] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
-                        </div>
-                      </Link>
+                        </Link>
+                      </div>
                     ))}
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
 import { db, categories } from '~/db';
-import { eq } from 'drizzle-orm';
+import { eq, asc, desc } from 'drizzle-orm';
 
 // GET - List all categories for user
 export async function loader({ request }: { request: Request }) {
@@ -16,7 +16,8 @@ export async function loader({ request }: { request: Request }) {
     const userCategories = await db
       .select()
       .from(categories)
-      .where(eq(categories.userId, user.id));
+      .where(eq(categories.userId, user.id))
+      .orderBy(asc(categories.sortOrder), asc(categories.createdAt));
 
     return Response.json({ categories: userCategories });
   } catch (error) {
@@ -42,6 +43,16 @@ export async function action({ request }: { request: Request }) {
       return Response.json({ error: 'Category name is required' }, { status: 400 });
     }
 
+    // Get the max sort order for the user to place new category at the end
+    const maxSortOrderResult = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.userId, user.id))
+      .orderBy(desc(categories.sortOrder))
+      .limit(1);
+
+    const maxSortOrder = maxSortOrderResult[0]?.sortOrder ?? -1;
+
     const newCategory = await db
       .insert(categories)
       .values({
@@ -50,6 +61,7 @@ export async function action({ request }: { request: Request }) {
         budgetLimit: budgetLimit ? budgetLimit.toString() : null,
         color: color || '#41A6AC',
         isIncome: isIncome || false,
+        sortOrder: maxSortOrder + 1,
       })
       .returning();
 
