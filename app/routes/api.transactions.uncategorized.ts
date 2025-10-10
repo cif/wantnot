@@ -13,17 +13,28 @@ export async function loader({ request }: { request: Request }) {
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Get parameters from URL
+    const url = new URL(request.url);
+    const includeHidden = url.searchParams.get('includeHidden') === 'true';
+
+    // Build where conditions
+    const conditions = [
+      eq(transactions.userId, user.id),
+      isNull(transactions.categoryId),
+      eq(transactions.pending, false),
+      eq(transactions.isTransfer, false)
+    ];
+
+    // Add hidden filter if not including hidden
+    if (!includeHidden) {
+      conditions.push(eq(transactions.isHidden, false));
+    }
+
     // Get ALL uncategorized transactions, not just recent 100
     const uncategorized = await db
       .select()
       .from(transactions)
-      .where(and(
-        eq(transactions.userId, user.id),
-        isNull(transactions.categoryId),
-        eq(transactions.isHidden, false),
-        eq(transactions.pending, false),
-        eq(transactions.isTransfer, false)
-      ))
+      .where(and(...conditions))
       .orderBy(desc(transactions.date));
 
     return Response.json({

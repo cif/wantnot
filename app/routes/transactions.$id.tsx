@@ -26,6 +26,7 @@ function TransactionDetailPage() {
   const [memo, setMemo] = useState('');
   const [isHidden, setIsHidden] = useState(false);
   const [isTransfer, setIsTransfer] = useState(false);
+  const [manualMonthYear, setManualMonthYear] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -99,6 +100,7 @@ function TransactionDetailPage() {
         setMemo(data.transaction.notes || '');
         setIsHidden(data.transaction.isHidden || false);
         setIsTransfer(data.transaction.isTransfer || false);
+        setManualMonthYear(data.transaction.manualMonthYear || '');
 
         if (categoriesRes.ok) {
           const catData = await categoriesRes.json();
@@ -135,6 +137,7 @@ function TransactionDetailPage() {
           notes: memo,
           isHidden,
           isTransfer,
+          manualMonthYear: manualMonthYear || null,
         }),
       });
 
@@ -177,6 +180,33 @@ function TransactionDetailPage() {
   }
 
   const isExpense = parseFloat(transaction.amount) > 0;
+
+  // Generate month/year options (±6 months from transaction date)
+  const generateMonthOptions = () => {
+    const options: { value: string; label: string }[] = [
+      { value: '', label: 'Use actual date' }
+    ];
+
+    const txnDate = new Date(transaction.date);
+    const startDate = new Date(txnDate);
+    startDate.setUTCMonth(startDate.getUTCMonth() - 6);
+
+    for (let i = 0; i < 13; i++) {
+      const date = new Date(startDate);
+      date.setUTCMonth(date.getUTCMonth() + i);
+      const value = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      options.push({ value, label });
+    }
+
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
+
+  // Helper to get the computed month/year for display
+  const computedMonthYear = manualMonthYear ||
+    `${new Date(transaction.date).getUTCFullYear()}-${String(new Date(transaction.date).getUTCMonth() + 1).padStart(2, '0')}`;
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -255,7 +285,27 @@ function TransactionDetailPage() {
       {/* Transaction Flags */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h3 className="text-sm font-medium text-gray-900 mb-4">Transaction Settings</h3>
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-2">
+              Assign to Month
+            </label>
+            <select
+              value={manualMonthYear}
+              onChange={(e) => setManualMonthYear(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#41A6AC] focus:border-transparent"
+            >
+              {monthOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-600 mt-1">
+              {manualMonthYear ? `Transaction will appear in ${monthOptions.find(o => o.value === manualMonthYear)?.label} reports` : 'Transaction will appear in its actual date\'s month'}
+            </p>
+          </div>
+
           <label className="flex items-start gap-3 cursor-pointer group">
             <input
               type="checkbox"

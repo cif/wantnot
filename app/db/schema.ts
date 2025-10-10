@@ -81,6 +81,9 @@ export const transactions = pgTable('transactions', {
   notes: text('notes'),
   isHidden: boolean('is_hidden').default(false).notNull(),
   isTransfer: boolean('is_transfer').default(false).notNull(),
+  // Manual month/year override for transactions (format: YYYY-MM)
+  // If set, this overrides the computed month from the date field
+  manualMonthYear: text('manual_month_year'),
   // Auto-categorization metadata
   autoCategorizationMethod: text('auto_categorization_method'), // 'rule' | 'vector' | 'llm' | 'manual' | 'ai' | null
   autoCategorizationConfidence: real('auto_categorization_confidence'), // 0.0 - 1.0

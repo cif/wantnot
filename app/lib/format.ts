@@ -91,21 +91,23 @@ export function formatPercent(
  * Format a date consistently
  * @param date - Date string or Date object
  * @param style - 'short' (1/1/23), 'medium' (Jan 1, 2023), 'long' (January 1, 2023)
+ * @param useUTC - Whether to display in UTC timezone (default: true)
  * @returns Formatted date string
  */
 export function formatDate(
   date: string | Date,
   style: 'short' | 'medium' | 'long' = 'medium',
-  locale: string = 'en-US'
+  locale: string = 'en-US',
+  useUTC: boolean = true
 ): string {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
 
   const options: Intl.DateTimeFormatOptions =
     style === 'short'
-      ? { month: 'numeric', day: 'numeric', year: '2-digit' }
+      ? { month: 'numeric', day: 'numeric', year: '2-digit', timeZone: useUTC ? 'UTC' : undefined }
       : style === 'long'
-      ? { month: 'long', day: 'numeric', year: 'numeric' }
-      : { month: 'short', day: 'numeric', year: 'numeric' };
+      ? { month: 'long', day: 'numeric', year: 'numeric', timeZone: useUTC ? 'UTC' : undefined }
+      : { month: 'short', day: 'numeric', year: 'numeric', timeZone: useUTC ? 'UTC' : undefined };
 
   return new Intl.DateTimeFormat(locale, options).format(dateObj);
 }

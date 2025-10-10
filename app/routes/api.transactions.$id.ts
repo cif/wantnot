@@ -44,7 +44,7 @@ export async function action({ request, params }: { request: Request; params: { 
     }
 
     const body = await request.json();
-    const { notes, isHidden, isTransfer } = body;
+    const { notes, isHidden, isTransfer, manualMonthYear } = body;
 
     const updateData: any = {
       updatedAt: new Date(),
@@ -53,6 +53,7 @@ export async function action({ request, params }: { request: Request; params: { 
     if (notes !== undefined) updateData.notes = notes;
     if (isHidden !== undefined) updateData.isHidden = isHidden;
     if (isTransfer !== undefined) updateData.isTransfer = isTransfer;
+    if (manualMonthYear !== undefined) updateData.manualMonthYear = manualMonthYear;
 
     const updated = await db
       .update(transactions)

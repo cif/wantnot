@@ -1,0 +1,1 @@
+ALTER TABLE "transactions" ADD COLUMN "manual_month_year" text;
