@@ -2,9 +2,10 @@ import type { Route } from "./+types/projects.$id";
 import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { Edit2, Trash2, ArrowLeft } from "lucide-react";
+import { formatCurrency } from "~/lib/format";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -86,6 +87,27 @@ function ProjectDetailPage() {
     fetchProject();
     fetchTransactions();
   }, [id]);
+
+  // Calculate project totals (cumulative, not monthly)
+  const projectTotals = useMemo(() => {
+    // Only include posted, non-transfer transactions
+    const relevantTransactions = transactions.filter(txn => !txn.pending && !txn.isTransfer);
+
+    const income = relevantTransactions
+      .filter(txn => parseFloat(txn.amount) < 0)
+      .reduce((sum, txn) => sum + Math.abs(parseFloat(txn.amount)), 0);
+
+    const expenses = relevantTransactions
+      .filter(txn => parseFloat(txn.amount) > 0)
+      .reduce((sum, txn) => sum + parseFloat(txn.amount), 0);
+
+    return {
+      income,
+      expenses,
+      net: income - expenses,
+      total: expenses, // Total spending (absolute value)
+    };
+  }, [transactions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,6 +305,30 @@ function ProjectDetailPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Project Totals */}
+      {transactions.length > 0 && (
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs text-gray-600 mb-1">Total Expenses</p>
+            <p className="text-xl font-bold text-gray-700 tabular-nums">
+              {formatCurrency(projectTotals.expenses)}
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs text-gray-600 mb-1">Total Income</p>
+            <p className="text-xl font-bold text-green-600 tabular-nums">
+              {formatCurrency(projectTotals.income, { showSign: true })}
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs text-gray-600 mb-1">Net</p>
+            <p className={`text-xl font-bold tabular-nums ${projectTotals.net >= 0 ? 'text-green-600' : 'text-gray-700'}`}>
+              {projectTotals.net >= 0 ? '+' : '-'}{formatCurrency(Math.abs(projectTotals.net))}
+            </p>
+          </div>
         </div>
       )}
 
