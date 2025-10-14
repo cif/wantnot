@@ -47,7 +47,7 @@ export async function loader({ request }: { request: Request }) {
       .from(transactions)
       .where(and(...conditions))
       .orderBy(desc(transactions.date))
-      .limit(month ? undefined : 500); // Limit to 500 if not filtering by month
+      .limit(month ? 10_000 : 500); // Limit to 500 if not filtering by month
 
     return Response.json({ transactions: userTransactions });
   } catch (error) {
