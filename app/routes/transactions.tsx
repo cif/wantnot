@@ -4,6 +4,7 @@ import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
 import { TransactionCategorySelect } from "~/components/TransactionCategorySelect";
 import { TransactionProjectSelect } from "~/components/TransactionProjectSelect";
+import { Toast } from "~/components/Toast";
 import { useState, useEffect, useMemo } from "react";
 import { EyeOff, Eye, ArrowLeftRight, X, RefreshCw } from "lucide-react";
 import { formatCurrency } from "~/lib/format";
@@ -656,16 +657,21 @@ function TransactionsPage() {
         </div>
       </div>
 
-      {/* Success/Error Messages */}
+      {/* Toast Notifications */}
       {successMessage && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
-          {successMessage}
-        </div>
+        <Toast
+          message={successMessage}
+          type="success"
+          onClose={() => setSuccessMessage(null)}
+        />
       )}
       {errorMessage && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-          {errorMessage}
-        </div>
+        <Toast
+          message={errorMessage}
+          type="error"
+          onClose={() => setErrorMessage(null)}
+          duration={4000}
+        />
       )}
 
       {/* Month Summary Stats */}
