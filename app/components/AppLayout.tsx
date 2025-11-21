@@ -11,6 +11,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
+  const [isLoadingCount, setIsLoadingCount] = useState(true);
   const { user, logout, getIdToken } = useAuth();
   const location = useLocation();
 
@@ -37,9 +38,11 @@ export function AppLayout({ children }: AppLayoutProps) {
         if (response.ok) {
           const data = await response.json();
           setUncategorizedCount(data.count || 0);
+          setIsLoadingCount(false);
         }
       } catch (error) {
         console.error('Error fetching uncategorized count:', error);
+        setIsLoadingCount(false);
       }
     };
 
@@ -114,7 +117,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const showBadge = item.badge && item.badge > 0;
+                const showBadge = !isLoadingCount && item.badge && item.badge > 0;
                 return (
                   <li key={item.path}>
                     <Link
@@ -137,7 +140,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                         <span className="font-medium text-sm flex-1">{item.label}</span>
                       )}
                       {showBadge && !isCollapsed && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 tabular-nums ${
                           isActive(item.path)
                             ? 'bg-white/20 text-white'
                             : 'bg-red-500 text-white'
