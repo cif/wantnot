@@ -117,7 +117,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const showBadge = !isLoadingCount && item.badge && item.badge > 0;
+                const showBadge = !isLoadingCount && typeof item.badge === 'number' && item.badge > 0;
                 return (
                   <li key={item.path}>
                     <Link
