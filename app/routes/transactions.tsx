@@ -54,6 +54,10 @@ function TransactionsPage() {
   >({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [confirmingGroup, setConfirmingGroup] = useState<string | null>(null);
+  const [txnSelections, setTxnSelections] = useState<
+    Record<string, { categoryId: string | null; projectId: string | null }>
+  >({});
+  const [confirmingTxnId, setConfirmingTxnId] = useState<string | null>(null);
 
   // Fetch transactions for selected month
   const fetchTransactionsForMonth = async (monthYear: string) => {
@@ -252,6 +256,102 @@ function TransactionsPage() {
       }
       return next;
     });
+  };
+
+  const updateTxnSelection = (
+    txnId: string,
+    field: "categoryId" | "projectId",
+    value: string | null,
+  ) => {
+    setTxnSelections((prev) => ({
+      ...prev,
+      [txnId]: {
+        categoryId: prev[txnId]?.categoryId ?? null,
+        projectId: prev[txnId]?.projectId ?? null,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleConfirmTransaction = async (txnId: string) => {
+    const selection = txnSelections[txnId];
+    if (!selection?.categoryId) {
+      setErrorMessage("Please select a category before confirming");
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
+
+    try {
+      setConfirmingTxnId(txnId);
+      const idToken = await getIdToken();
+      if (!idToken) throw new Error("Not authenticated");
+
+      // Categorize
+      const catResponse = await fetch(
+        `/api/transactions/${txnId}/categorize`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ categoryId: selection.categoryId }),
+        },
+      );
+      if (!catResponse.ok) throw new Error("Failed to categorize");
+
+      // Tag project if set
+      if (selection.projectId) {
+        const projResponse = await fetch(
+          `/api/transactions/${txnId}/tag-project`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ projectId: selection.projectId }),
+          },
+        );
+        if (!projResponse.ok) throw new Error("Failed to tag project");
+      }
+
+      // Update local state
+      setTransactions((prev) =>
+        prev.map((txn) =>
+          txn.id === txnId
+            ? {
+                ...txn,
+                categoryId: selection.categoryId,
+                projectId: selection.projectId ?? txn.projectId,
+                autoCategorizationMethod: "manual",
+                autoCategorizationConfidence: 1.0,
+              }
+            : txn,
+        ),
+      );
+
+      // Remove from uncategorized and groups
+      setAllUncategorized((prev) => prev.filter((txn) => txn.id !== txnId));
+      removeTransactionFromGroups(txnId);
+
+      // Clean up selection
+      setTxnSelections((prev) => {
+        const next = { ...prev };
+        delete next[txnId];
+        return next;
+      });
+
+      window.dispatchEvent(new Event("transaction-updated"));
+      setSuccessMessage("Transaction confirmed!");
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (error) {
+      console.error("Error confirming transaction:", error);
+      setErrorMessage("Failed to confirm transaction");
+      setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setConfirmingTxnId(null);
+    }
   };
 
   // State for building month dropdown
@@ -1065,11 +1165,16 @@ function TransactionsPage() {
                     {isExpanded && (
                       <div className="bg-gray-50 border-t border-gray-100">
                         {group.transactions.map((txn: any) => {
-                          const isBeingCategorized = categorizingId === txn.id;
+                          const txnSel = txnSelections[txn.id];
+                          const isConfirmingTxn = confirmingTxnId === txn.id;
+                          const txnIsIncome = parseFloat(txn.amount) < 0;
+                          const txnCategories = categories.filter(
+                            (cat) => cat.isIncome === txnIsIncome,
+                          );
                           return (
                             <div
                               key={txn.id}
-                              className={`px-3 py-2 pl-10 hover:bg-gray-100 transition-all duration-300 border-t border-gray-100 first:border-t-0 ${isBeingCategorized ? "opacity-50" : ""}`}
+                              className={`px-3 py-2 pl-10 hover:bg-gray-100 transition-all duration-300 border-t border-gray-100 first:border-t-0 ${isConfirmingTxn ? "opacity-50" : ""}`}
                             >
                               <div className="flex items-center gap-3">
                                 <div
@@ -1100,24 +1205,50 @@ function TransactionsPage() {
                                   </p>
                                 </div>
 
-                                {/* Individual Category Dropdown */}
+                                {/* Category Dropdown (select only, no auto-submit) */}
                                 <div className="relative w-32 flex-shrink-0">
-                                  <TransactionCategorySelect
-                                    transaction={txn}
-                                    categories={categories}
-                                    onCategorize={handleCategorize}
-                                    isLoading={categorizingId === txn.id}
-                                  />
+                                  <select
+                                    value={txnSel?.categoryId || ""}
+                                    onChange={(e) =>
+                                      updateTxnSelection(
+                                        txn.id,
+                                        "categoryId",
+                                        e.target.value || null,
+                                      )
+                                    }
+                                    disabled={isConfirmingTxn}
+                                    className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
+                                  >
+                                    <option value="">Uncategorized</option>
+                                    {txnCategories.map((cat) => (
+                                      <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                      </option>
+                                    ))}
+                                  </select>
                                 </div>
 
-                                {/* Individual Project Dropdown */}
+                                {/* Project Dropdown (select only, no auto-submit) */}
                                 <div className="relative w-28 flex-shrink-0">
-                                  <TransactionProjectSelect
-                                    transaction={txn}
-                                    projects={projects}
-                                    onTagProject={handleTagProject}
-                                    isLoading={taggingProjectId === txn.id}
-                                  />
+                                  <select
+                                    value={txnSel?.projectId || ""}
+                                    onChange={(e) =>
+                                      updateTxnSelection(
+                                        txn.id,
+                                        "projectId",
+                                        e.target.value || null,
+                                      )
+                                    }
+                                    disabled={isConfirmingTxn}
+                                    className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
+                                  >
+                                    <option value="">No project</option>
+                                    {projects.map((proj) => (
+                                      <option key={proj.id} value={proj.id}>
+                                        {proj.name}
+                                      </option>
+                                    ))}
+                                  </select>
                                 </div>
 
                                 <div className="w-24 text-right flex-shrink-0">
@@ -1130,6 +1261,32 @@ function TransactionsPage() {
                                     )}
                                   </p>
                                 </div>
+
+                                {/* Confirm Button */}
+                                <button
+                                  onClick={() =>
+                                    handleConfirmTransaction(txn.id)
+                                  }
+                                  disabled={
+                                    isConfirmingTxn || !txnSel?.categoryId
+                                  }
+                                  className={`p-1 rounded transition-colors flex-shrink-0 ${
+                                    txnSel?.categoryId
+                                      ? "text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700"
+                                      : "text-gray-300 cursor-not-allowed"
+                                  } disabled:opacity-50`}
+                                  title={
+                                    txnSel?.categoryId
+                                      ? "Confirm"
+                                      : "Select a category first"
+                                  }
+                                >
+                                  {isConfirmingTxn ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
 
                                 {/* Hide Button */}
                                 <button
