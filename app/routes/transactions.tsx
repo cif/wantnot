@@ -6,7 +6,7 @@ import { TransactionCategorySelect } from "~/components/TransactionCategorySelec
 import { TransactionProjectSelect } from "~/components/TransactionProjectSelect";
 import { Toast } from "~/components/Toast";
 import { useState, useEffect, useMemo } from "react";
-import { EyeOff, Eye, ArrowLeftRight, X, RefreshCw } from "lucide-react";
+import { EyeOff, Eye, ArrowLeftRight, X, RefreshCw, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { formatCurrency } from "~/lib/format";
 
 export function meta({}: Route.MetaArgs) {
@@ -46,6 +46,14 @@ function TransactionsPage() {
   const [activeTab, setActiveTab] = useState<"list" | "category" | "project">(
     "category",
   );
+
+  // Recurring groups state
+  const [recurringGroups, setRecurringGroups] = useState<any[]>([]);
+  const [groupSelections, setGroupSelections] = useState<
+    Record<string, { categoryId: string | null; projectId: string | null }>
+  >({});
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [confirmingGroup, setConfirmingGroup] = useState<string | null>(null);
 
   // Fetch transactions for selected month
   const fetchTransactionsForMonth = async (monthYear: string) => {
@@ -91,6 +99,142 @@ function TransactionsPage() {
     }
   };
 
+  // Fetch recurring groups (grouped uncategorized with suggestions)
+  const fetchRecurringGroups = async () => {
+    try {
+      const idToken = await getIdToken();
+      if (!idToken) return;
+
+      const response = await fetch("/api/transactions/recurring-groups", {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const groups = data.groups || [];
+        setRecurringGroups(groups);
+
+        // Initialize selections from suggestions
+        const selections: Record<
+          string,
+          { categoryId: string | null; projectId: string | null }
+        > = {};
+        for (const group of groups) {
+          selections[group.merchantPattern] = {
+            categoryId: group.suggestedCategoryId,
+            projectId: group.suggestedProjectId,
+          };
+        }
+        setGroupSelections(selections);
+      }
+    } catch (error) {
+      console.error("Error fetching recurring groups:", error);
+    }
+  };
+
+  // Confirm a recurring group (bulk categorize + project tag)
+  const handleConfirmGroup = async (merchantPattern: string) => {
+    const group = recurringGroups.find(
+      (g) => g.merchantPattern === merchantPattern,
+    );
+    if (!group) return;
+
+    const selection = groupSelections[merchantPattern];
+    if (!selection?.categoryId) {
+      setErrorMessage("Please select a category before confirming");
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
+
+    try {
+      setConfirmingGroup(merchantPattern);
+      const idToken = await getIdToken();
+      if (!idToken) throw new Error("Not authenticated");
+
+      const transactionIds = group.transactions.map((t: any) => t.id);
+
+      const response = await fetch("/api/transactions/bulk-categorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          transactionIds,
+          categoryId: selection.categoryId,
+          projectId: selection.projectId,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to confirm group");
+
+      // Remove confirmed group from state
+      setRecurringGroups((prev) =>
+        prev.filter((g) => g.merchantPattern !== merchantPattern),
+      );
+
+      // Remove from uncategorized
+      setAllUncategorized((prev) =>
+        prev.filter((txn) => !transactionIds.includes(txn.id)),
+      );
+
+      // Update transactions list if any are currently displayed
+      setTransactions((prev) =>
+        prev.map((txn) =>
+          transactionIds.includes(txn.id)
+            ? {
+                ...txn,
+                categoryId: selection.categoryId,
+                projectId: selection.projectId ?? txn.projectId,
+                autoCategorizationMethod: "manual",
+                autoCategorizationConfidence: 1.0,
+              }
+            : txn,
+        ),
+      );
+
+      // Notify badge
+      window.dispatchEvent(new Event("transaction-updated"));
+
+      setSuccessMessage(
+        `${transactionIds.length} transaction${transactionIds.length !== 1 ? "s" : ""} confirmed!`,
+      );
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (error) {
+      console.error("Error confirming group:", error);
+      setErrorMessage("Failed to confirm group");
+      setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setConfirmingGroup(null);
+    }
+  };
+
+  const updateGroupSelection = (
+    merchantPattern: string,
+    field: "categoryId" | "projectId",
+    value: string | null,
+  ) => {
+    setGroupSelections((prev) => ({
+      ...prev,
+      [merchantPattern]: {
+        ...prev[merchantPattern],
+        [field]: value,
+      },
+    }));
+  };
+
+  const toggleGroupExpanded = (merchantPattern: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(merchantPattern)) {
+        next.delete(merchantPattern);
+      } else {
+        next.add(merchantPattern);
+      }
+      return next;
+    });
+  };
+
   // State for building month dropdown
   const [allTransactionsForMonths, setAllTransactionsForMonths] = useState<
     any[]
@@ -132,8 +276,8 @@ function TransactionsPage() {
         setAllTransactionsForMonths(data.transactions || []);
       }
 
-      // Fetch uncategorized separately so it can be refetched when showHidden changes
-      await fetchUncategorized();
+      // Fetch uncategorized and recurring groups
+      await Promise.all([fetchUncategorized(), fetchRecurringGroups()]);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -723,8 +867,8 @@ function TransactionsPage() {
         </div>
       </div>
 
-      {/* Needs Categorization Section */}
-      {allUncategorized.length > 0 && (
+      {/* Needs Categorization - Recurring Groups */}
+      {recurringGroups.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -733,8 +877,9 @@ function TransactionsPage() {
               </h2>
               <p className="text-sm text-gray-600 mt-0.5">
                 {allUncategorized.length} transaction
-                {allUncategorized.length !== 1 ? "s" : ""} need
-                {allUncategorized.length === 1 ? "s" : ""} a category
+                {allUncategorized.length !== 1 ? "s" : ""} across{" "}
+                {recurringGroups.length} merchant
+                {recurringGroups.length !== 1 ? "s" : ""}
               </p>
             </div>
             <button
@@ -752,122 +897,210 @@ function TransactionsPage() {
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-4">
             <div className="divide-y divide-gray-100">
-              {allUncategorized.slice(0, 10).map((txn) => {
-                const project = projects.find((p) => p.id === txn.projectId);
-                const isBeingCategorized = categorizingId === txn.id;
+              {recurringGroups.map((group) => {
+                const selection = groupSelections[group.merchantPattern];
+                const isExpanded = expandedGroups.has(group.merchantPattern);
+                const isConfirming =
+                  confirmingGroup === group.merchantPattern;
+                const hasSuggestion = !!group.suggestedCategoryId;
+                const selectedCategory = categories.find(
+                  (c) => c.id === selection?.categoryId,
+                );
+
+                // Determine if this group is income or expense based on total
+                const isIncome = group.totalAmount < 0;
+                const filteredCategories = categories.filter(
+                  (cat) => cat.isIncome === isIncome,
+                );
+
                 return (
-                  <div
-                    key={txn.id}
-                    className={`p-3 hover:bg-gray-50 transition-all duration-300 ${isBeingCategorized ? "opacity-50" : "opacity-100"}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Date */}
-                      <div
-                        className="w-14 flex-shrink-0 cursor-pointer"
-                        onClick={() =>
-                          (window.location.href = `/transactions/${txn.id}`)
-                        }
-                      >
-                        <p className="text-xs font-medium text-gray-900">
-                          {new Date(txn.date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            timeZone: "UTC",
-                          })}
-                        </p>
-                      </div>
-
-                      {/* Transaction Info */}
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() =>
-                          (window.location.href = `/transactions/${txn.id}`)
-                        }
-                      >
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {txn.merchantName || txn.name}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {project && (
-                            <div className="flex items-center gap-1">
-                              <div
-                                className="w-1.5 h-1.5 rounded-full"
-                                style={{ backgroundColor: project.color }}
-                              />
-                              <span className="text-xs text-gray-600">
-                                {project.name}
-                              </span>
-                            </div>
-                          )}
-                          {txn.pending && (
-                            <span className="text-xs px-1.5 py-0.5 bg-yellow-50 text-yellow-700 rounded">
-                              Pending
-                            </span>
-                          )}
-                          {txn.isTransfer && (
-                            <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded flex items-center gap-1">
-                              <ArrowLeftRight className="w-3 h-3" />
-                              Transfer
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Category Dropdown */}
-                      <div className="relative w-32 flex-shrink-0">
-                        <TransactionCategorySelect
-                          transaction={txn}
-                          categories={categories}
-                          onCategorize={handleCategorize}
-                          isLoading={categorizingId === txn.id}
-                        />
-                      </div>
-
-                      {/* Project Dropdown */}
-                      <div className="relative w-28 flex-shrink-0">
-                        <TransactionProjectSelect
-                          transaction={txn}
-                          projects={projects}
-                          onTagProject={handleTagProject}
-                          isLoading={taggingProjectId === txn.id}
-                        />
-                      </div>
-
-                      {/* Amount */}
-                      <div className="w-24 text-right flex-shrink-0">
-                        <p
-                          className={`text-sm font-semibold ${parseFloat(txn.amount) < 0 ? "text-green-600" : "text-gray-700"}`}
+                  <div key={group.merchantPattern}>
+                    {/* Group Header */}
+                    <div
+                      className={`p-3 transition-all duration-300 ${isConfirming ? "opacity-50" : ""} ${hasSuggestion ? "bg-emerald-50/50" : ""}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Expand toggle */}
+                        <button
+                          onClick={() =>
+                            toggleGroupExpanded(group.merchantPattern)
+                          }
+                          className="p-0.5 text-gray-400 hover:text-gray-600 flex-shrink-0"
                         >
-                          {parseFloat(txn.amount) < 0 ? "+" : "-"}$
-                          {Math.abs(parseFloat(txn.amount)).toFixed(2)}
-                        </p>
-                      </div>
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
 
-                      {/* Hide Button */}
-                      <button
-                        onClick={() => handleToggleHidden(txn.id, txn.isHidden)}
-                        disabled={hidingId === txn.id}
-                        className="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                        title="Hide transaction"
-                      >
-                        {hidingId === txn.id ? (
-                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <EyeOff className="w-4 h-4" />
-                        )}
-                      </button>
+                        {/* Merchant Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {group.displayName}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-gray-500">
+                              {group.count} transaction
+                              {group.count !== 1 ? "s" : ""}
+                            </span>
+                            {hasSuggestion && (
+                              <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">
+                                Suggested
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Category Dropdown */}
+                        <div className="relative w-32 flex-shrink-0">
+                          <select
+                            value={selection?.categoryId || ""}
+                            onChange={(e) =>
+                              updateGroupSelection(
+                                group.merchantPattern,
+                                "categoryId",
+                                e.target.value || null,
+                              )
+                            }
+                            disabled={isConfirming}
+                            className={`w-full px-2 py-1 text-xs bg-white text-gray-900 border rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 ${
+                              hasSuggestion
+                                ? "border-emerald-300"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            <option value="">Uncategorized</option>
+                            {filteredCategories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Project Dropdown */}
+                        <div className="relative w-28 flex-shrink-0">
+                          <select
+                            value={selection?.projectId || ""}
+                            onChange={(e) =>
+                              updateGroupSelection(
+                                group.merchantPattern,
+                                "projectId",
+                                e.target.value || null,
+                              )
+                            }
+                            disabled={isConfirming}
+                            className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
+                          >
+                            <option value="">No project</option>
+                            {projects.map((proj) => (
+                              <option key={proj.id} value={proj.id}>
+                                {proj.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Amount */}
+                        <div className="w-24 text-right flex-shrink-0">
+                          <p
+                            className={`text-sm font-semibold tabular-nums ${group.totalAmount < 0 ? "text-green-600" : "text-gray-700"}`}
+                          >
+                            {group.totalAmount < 0 ? "+" : "-"}$
+                            {Math.abs(group.totalAmount).toFixed(2)}
+                          </p>
+                        </div>
+
+                        {/* Confirm Button */}
+                        <button
+                          onClick={() =>
+                            handleConfirmGroup(group.merchantPattern)
+                          }
+                          disabled={
+                            isConfirming || !selection?.categoryId
+                          }
+                          className={`ml-1 p-1.5 rounded transition-colors flex-shrink-0 ${
+                            selection?.categoryId
+                              ? "text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700"
+                              : "text-gray-300 cursor-not-allowed"
+                          } disabled:opacity-50`}
+                          title={
+                            selection?.categoryId
+                              ? `Confirm ${group.count} transaction${group.count !== 1 ? "s" : ""}`
+                              : "Select a category first"
+                          }
+                        >
+                          {isConfirming ? (
+                            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Expanded Transaction List */}
+                    {isExpanded && (
+                      <div className="bg-gray-50 border-t border-gray-100">
+                        {group.transactions.map((txn: any) => {
+                          const project = projects.find(
+                            (p) => p.id === txn.projectId,
+                          );
+                          return (
+                            <div
+                              key={txn.id}
+                              className="px-3 py-2 pl-10 hover:bg-gray-100 transition-colors border-t border-gray-100 first:border-t-0"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-14 flex-shrink-0 cursor-pointer"
+                                  onClick={() =>
+                                    (window.location.href = `/transactions/${txn.id}`)
+                                  }
+                                >
+                                  <p className="text-xs text-gray-600">
+                                    {new Date(txn.date).toLocaleDateString(
+                                      "en-US",
+                                      {
+                                        month: "short",
+                                        day: "numeric",
+                                        timeZone: "UTC",
+                                      },
+                                    )}
+                                  </p>
+                                </div>
+                                <div
+                                  className="flex-1 min-w-0 cursor-pointer"
+                                  onClick={() =>
+                                    (window.location.href = `/transactions/${txn.id}`)
+                                  }
+                                >
+                                  <p className="text-xs text-gray-700 truncate">
+                                    {txn.name}
+                                  </p>
+                                </div>
+                                <div className="w-24 text-right flex-shrink-0">
+                                  <p
+                                    className={`text-xs font-medium tabular-nums ${parseFloat(txn.amount) < 0 ? "text-green-600" : "text-gray-600"}`}
+                                  >
+                                    {parseFloat(txn.amount) < 0 ? "+" : "-"}$
+                                    {Math.abs(parseFloat(txn.amount)).toFixed(
+                                      2,
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-          {allUncategorized.length > 10 && (
-            <p className="text-sm text-gray-600 text-center mb-4">
-              +{allUncategorized.length - 10} more transactions need
-              categorization
-            </p>
-          )}
         </div>
       )}
 

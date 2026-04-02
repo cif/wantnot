@@ -15,7 +15,7 @@ export async function action({ request }: { request: Request }) {
     }
 
     const body = await request.json();
-    const { transactionIds, categoryId, categorizations } = body;
+    const { transactionIds, categoryId, projectId, categorizations } = body;
 
     // Support both formats: single category for multiple transactions OR map of transaction->category
     if (categorizations) {
@@ -96,14 +96,19 @@ export async function action({ request }: { request: Request }) {
       }
 
       // Update all transactions
+      const updateFields: Record<string, any> = {
+        categoryId: categoryId || null,
+        autoCategorizationMethod: 'manual',
+        autoCategorizationConfidence: 1.0,
+        updatedAt: new Date(),
+      };
+      if (projectId !== undefined) {
+        updateFields.projectId = projectId || null;
+      }
+
       await db
         .update(transactions)
-        .set({
-          categoryId: categoryId || null,
-          autoCategorizationMethod: 'manual',
-          autoCategorizationConfidence: 1.0,
-          updatedAt: new Date(),
-        })
+        .set(updateFields)
         .where(inArray(transactions.id, transactionIds));
 
       // Learn from each categorization if a category was assigned
