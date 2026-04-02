@@ -17,6 +17,7 @@ export default [
   route("api/transactions/uncategorized", "routes/api.transactions.uncategorized.ts"),
   route("api/transactions/bulk-categorize", "routes/api.transactions.bulk-categorize.ts"),
   route("api/transactions/recurring-groups", "routes/api.transactions.recurring-groups.ts"),
+  route("api/transactions/deduplicate", "routes/api.transactions.deduplicate.ts"),
   route("api/transactions/:id", "routes/api.transactions.$id.ts"),
   route("api/transactions/:id/categorize", "routes/api.transactions.$id.categorize.ts"),
   route("api/transactions/:id/tag-project", "routes/api.transactions.$id.tag-project.ts"),

@@ -158,8 +158,37 @@ export class PlaidService {
       // Handle ADDED transactions
       for (const txn of added) {
         try {
-          // Skip auto-categorization during sync for performance
-          // Users can use the AI suggest feature to categorize in bulk
+          // If this posted transaction replaces a pending one, update in place
+          if (txn.pending_transaction_id) {
+            const existingPending = await db
+              .select()
+              .from(transactions)
+              .where(eq(transactions.plaidTransactionId, txn.pending_transaction_id))
+              .limit(1);
+
+            if (existingPending.length > 0) {
+              // Replace the pending transaction with the posted version
+              await db
+                .update(transactions)
+                .set({
+                  plaidTransactionId: txn.transaction_id,
+                  pendingTransactionId: txn.pending_transaction_id,
+                  amount: txn.amount.toString(),
+                  name: txn.name,
+                  merchantName: txn.merchant_name || null,
+                  date: new Date(txn.date),
+                  authorizedDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
+                  pending: false,
+                  plaidCategory: txn.category || null,
+                  plaidCategoryId: txn.category_id || null,
+                  updatedAt: new Date(),
+                })
+                .where(eq(transactions.id, existingPending[0].id));
+
+              modifiedCount++;
+              continue;
+            }
+          }
 
           // Use onConflictDoNothing to make inserts idempotent
           const result = await db

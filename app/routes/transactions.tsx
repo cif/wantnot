@@ -118,8 +118,12 @@ function TransactionsPage() {
         const groups = data.groups || [];
         setRecurringGroups(groups);
 
-        // Initialize selections from suggestions
+        // Initialize group-level and per-transaction selections from suggestions
         const selections: Record<
+          string,
+          { categoryId: string | null; projectId: string | null }
+        > = {};
+        const txnSels: Record<
           string,
           { categoryId: string | null; projectId: string | null }
         > = {};
@@ -128,8 +132,16 @@ function TransactionsPage() {
             categoryId: group.suggestedCategoryId,
             projectId: group.suggestedProjectId,
           };
+          // Seed per-transaction selections (used by single-row and expanded views)
+          for (const txn of group.transactions) {
+            txnSels[txn.id] = {
+              categoryId: group.suggestedCategoryId,
+              projectId: group.suggestedProjectId,
+            };
+          }
         }
         setGroupSelections(selections);
+        setTxnSelections(txnSels);
       }
     } catch (error) {
       console.error("Error fetching recurring groups:", error);
@@ -1024,9 +1036,7 @@ function TransactionsPage() {
                 const isConfirming =
                   confirmingGroup === group.merchantPattern;
                 const hasSuggestion = !!group.suggestedCategoryId;
-                const selectedCategory = categories.find(
-                  (c) => c.id === selection?.categoryId,
-                );
+                const isSingle = group.count === 1;
 
                 // Determine if this group is income or expense based on total
                 const isIncome = group.totalAmount < 0;
@@ -1034,6 +1044,154 @@ function TransactionsPage() {
                   (cat) => cat.isIncome === isIncome,
                 );
 
+                // Single transaction: flat row using txnSelections
+                if (isSingle) {
+                  const txn = group.transactions[0];
+                  const txnSel = txnSelections[txn.id];
+                  const isConfirmingTxn = confirmingTxnId === txn.id;
+
+                  return (
+                    <div
+                      key={group.merchantPattern}
+                      className={`p-3 transition-all duration-300 ${isConfirmingTxn ? "opacity-50" : ""} ${hasSuggestion ? "bg-emerald-50/50" : ""}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Date */}
+                        <div
+                          className="w-14 flex-shrink-0 cursor-pointer"
+                          onClick={() =>
+                            (window.location.href = `/transactions/${txn.id}`)
+                          }
+                        >
+                          <p className="text-xs font-medium text-gray-900">
+                            {new Date(txn.date).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              timeZone: "UTC",
+                            })}
+                          </p>
+                        </div>
+
+                        {/* Transaction Info */}
+                        <div
+                          className="flex-1 min-w-0 cursor-pointer"
+                          onClick={() =>
+                            (window.location.href = `/transactions/${txn.id}`)
+                          }
+                        >
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {txn.merchantName || txn.name}
+                          </p>
+                          {hasSuggestion && (
+                            <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">
+                              Suggested
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Category Dropdown */}
+                        <div className="relative w-32 flex-shrink-0">
+                          <select
+                            value={txnSel?.categoryId || ""}
+                            onChange={(e) =>
+                              updateTxnSelection(
+                                txn.id,
+                                "categoryId",
+                                e.target.value || null,
+                              )
+                            }
+                            disabled={isConfirmingTxn}
+                            className={`w-full px-2 py-1 text-xs bg-white text-gray-900 border rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50 ${
+                              hasSuggestion
+                                ? "border-emerald-300"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            <option value="">Uncategorized</option>
+                            {filteredCategories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Project Dropdown */}
+                        <div className="relative w-28 flex-shrink-0">
+                          <select
+                            value={txnSel?.projectId || ""}
+                            onChange={(e) =>
+                              updateTxnSelection(
+                                txn.id,
+                                "projectId",
+                                e.target.value || null,
+                              )
+                            }
+                            disabled={isConfirmingTxn}
+                            className="w-full px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:ring-1 focus:ring-[#41A6AC] focus:border-transparent disabled:opacity-50"
+                          >
+                            <option value="">No project</option>
+                            {projects.map((proj) => (
+                              <option key={proj.id} value={proj.id}>
+                                {proj.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Amount */}
+                        <div className="w-24 text-right flex-shrink-0">
+                          <p
+                            className={`text-sm font-semibold tabular-nums ${parseFloat(txn.amount) < 0 ? "text-green-600" : "text-gray-700"}`}
+                          >
+                            {parseFloat(txn.amount) < 0 ? "+" : "-"}$
+                            {Math.abs(parseFloat(txn.amount)).toFixed(2)}
+                          </p>
+                        </div>
+
+                        {/* Confirm Button */}
+                        <button
+                          onClick={() => handleConfirmTransaction(txn.id)}
+                          disabled={isConfirmingTxn || !txnSel?.categoryId}
+                          className={`ml-1 p-1.5 rounded transition-colors flex-shrink-0 ${
+                            txnSel?.categoryId
+                              ? "text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700"
+                              : "text-gray-300 cursor-not-allowed"
+                          } disabled:opacity-50`}
+                          title={
+                            txnSel?.categoryId
+                              ? "Confirm"
+                              : "Select a category first"
+                          }
+                        >
+                          {isConfirmingTxn ? (
+                            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        {/* Hide Button */}
+                        <button
+                          onClick={() =>
+                            handleToggleHidden(txn.id, txn.isHidden)
+                          }
+                          disabled={hidingId === txn.id}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                          title="Hide transaction"
+                        >
+                          {hidingId === txn.id ? (
+                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <EyeOff className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Multi-transaction group: collapsible
                 return (
                   <div key={group.merchantPattern}>
                     {/* Group Header */}
@@ -1062,8 +1220,7 @@ function TransactionsPage() {
                           </p>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-xs text-gray-500">
-                              {group.count} transaction
-                              {group.count !== 1 ? "s" : ""}
+                              {group.count} transactions
                             </span>
                             {hasSuggestion && (
                               <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">
@@ -1148,7 +1305,7 @@ function TransactionsPage() {
                           } disabled:opacity-50`}
                           title={
                             selection?.categoryId
-                              ? `Confirm ${group.count} transaction${group.count !== 1 ? "s" : ""}`
+                              ? `Confirm ${group.count} transactions`
                               : "Select a category first"
                           }
                         >
@@ -1205,7 +1362,7 @@ function TransactionsPage() {
                                   </p>
                                 </div>
 
-                                {/* Category Dropdown (select only, no auto-submit) */}
+                                {/* Category Dropdown */}
                                 <div className="relative w-32 flex-shrink-0">
                                   <select
                                     value={txnSel?.categoryId || ""}
@@ -1228,7 +1385,7 @@ function TransactionsPage() {
                                   </select>
                                 </div>
 
-                                {/* Project Dropdown (select only, no auto-submit) */}
+                                {/* Project Dropdown */}
                                 <div className="relative w-28 flex-shrink-0">
                                   <select
                                     value={txnSel?.projectId || ""}
