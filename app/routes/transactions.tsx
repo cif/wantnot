@@ -223,6 +223,25 @@ function TransactionsPage() {
     }));
   };
 
+  // Remove a single transaction from recurring groups (when individually handled)
+  const removeTransactionFromGroups = (transactionId: string) => {
+    setRecurringGroups((prev) =>
+      prev
+        .map((group) => ({
+          ...group,
+          transactions: group.transactions.filter(
+            (t: any) => t.id !== transactionId,
+          ),
+          count: group.transactions.filter((t: any) => t.id !== transactionId)
+            .length,
+          totalAmount: group.transactions
+            .filter((t: any) => t.id !== transactionId)
+            .reduce((sum: number, t: any) => sum + parseFloat(t.amount), 0),
+        }))
+        .filter((group) => group.transactions.length > 0),
+    );
+  };
+
   const toggleGroupExpanded = (merchantPattern: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -423,11 +442,12 @@ function TransactionsPage() {
         ),
       );
 
-      // Remove from allUncategorized after a brief delay to allow fade animation
+      // Remove from allUncategorized and recurring groups
       setTimeout(() => {
         setAllUncategorized(
           allUncategorized.filter((txn) => txn.id !== transactionId),
         );
+        removeTransactionFromGroups(transactionId);
       }, 150);
 
       // Notify AppLayout to refresh badge count
@@ -522,12 +542,13 @@ function TransactionsPage() {
         ),
       );
 
-      // Also update allUncategorized state
+      // Also update allUncategorized and recurring groups state
       if (!currentHiddenState) {
-        // If hiding, remove from allUncategorized
+        // If hiding, remove from allUncategorized and recurring groups
         setAllUncategorized(
           allUncategorized.filter((txn) => txn.id !== transactionId),
         );
+        removeTransactionFromGroups(transactionId);
       } else {
         // If unhiding, we need to check if it should be in the list
         // For simplicity, just refetch the uncategorized list
@@ -1044,13 +1065,11 @@ function TransactionsPage() {
                     {isExpanded && (
                       <div className="bg-gray-50 border-t border-gray-100">
                         {group.transactions.map((txn: any) => {
-                          const project = projects.find(
-                            (p) => p.id === txn.projectId,
-                          );
+                          const isBeingCategorized = categorizingId === txn.id;
                           return (
                             <div
                               key={txn.id}
-                              className="px-3 py-2 pl-10 hover:bg-gray-100 transition-colors border-t border-gray-100 first:border-t-0"
+                              className={`px-3 py-2 pl-10 hover:bg-gray-100 transition-all duration-300 border-t border-gray-100 first:border-t-0 ${isBeingCategorized ? "opacity-50" : ""}`}
                             >
                               <div className="flex items-center gap-3">
                                 <div
@@ -1080,6 +1099,27 @@ function TransactionsPage() {
                                     {txn.name}
                                   </p>
                                 </div>
+
+                                {/* Individual Category Dropdown */}
+                                <div className="relative w-32 flex-shrink-0">
+                                  <TransactionCategorySelect
+                                    transaction={txn}
+                                    categories={categories}
+                                    onCategorize={handleCategorize}
+                                    isLoading={categorizingId === txn.id}
+                                  />
+                                </div>
+
+                                {/* Individual Project Dropdown */}
+                                <div className="relative w-28 flex-shrink-0">
+                                  <TransactionProjectSelect
+                                    transaction={txn}
+                                    projects={projects}
+                                    onTagProject={handleTagProject}
+                                    isLoading={taggingProjectId === txn.id}
+                                  />
+                                </div>
+
                                 <div className="w-24 text-right flex-shrink-0">
                                   <p
                                     className={`text-xs font-medium tabular-nums ${parseFloat(txn.amount) < 0 ? "text-green-600" : "text-gray-600"}`}
@@ -1090,6 +1130,22 @@ function TransactionsPage() {
                                     )}
                                   </p>
                                 </div>
+
+                                {/* Hide Button */}
+                                <button
+                                  onClick={() =>
+                                    handleToggleHidden(txn.id, txn.isHidden)
+                                  }
+                                  disabled={hidingId === txn.id}
+                                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                                  title="Hide transaction"
+                                >
+                                  {hidingId === txn.id ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
                               </div>
                             </div>
                           );
