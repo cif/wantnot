@@ -12,8 +12,13 @@ export async function loader({ request }: { request: Request }) {
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const url = new URL(request.url);
-    const year = url.searchParams.get('year') || new Date().getUTCFullYear().toString();
+    // Build trailing 12 months ending at current month
+    const now = new Date();
+    const allMonths: string[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      allMonths.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    }
 
     // Fetch user categories
     const userCategories = await db
@@ -37,14 +42,9 @@ export async function loader({ request }: { request: Request }) {
         eq(transactions.isHidden, false),
         eq(transactions.pending, false),
         eq(transactions.isTransfer, false),
-        sql`COALESCE(${transactions.manualMonthYear}, TO_CHAR(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) LIKE ${year + '-%'}`
+        sql`COALESCE(${transactions.manualMonthYear}, TO_CHAR(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) IN (${sql.join(allMonths.map(m => sql`${m}`), sql`, `)})`
       ))
       .groupBy(sql`effective_month`, transactions.categoryId);
-
-    // Build all 12 months for the year
-    const allMonths = Array.from({ length: 12 }, (_, i) =>
-      `${year}-${String(i + 1).padStart(2, '0')}`
-    );
 
     // Build category lookup
     const catMap = new Map(userCategories.map(c => [c.id, c]));
@@ -100,9 +100,12 @@ export async function loader({ request }: { request: Request }) {
       monthsActive: 0,
     });
 
+    const monthIndexMap = new Map(allMonths.map((m, i) => [m, i]));
+
     for (const row of monthlySpending) {
       const catId = row.categoryId || 'uncategorized';
-      const monthIndex = parseInt(row.month!.split('-')[1]) - 1;
+      const monthIndex = monthIndexMap.get(row.month as string);
+      if (monthIndex === undefined) continue;
       const total = parseFloat(row.total);
       const entry = categoryTotals.get(catId);
       if (!entry) continue;
@@ -175,7 +178,7 @@ export async function loader({ request }: { request: Request }) {
       .reduce((s, c) => s + parseFloat(c.budgetLimit!) * 12, 0);
 
     return Response.json({
-      year: parseInt(year),
+      months: allMonths,
       monthlyData,
       categoryAnnuals,
       annualSummary: {

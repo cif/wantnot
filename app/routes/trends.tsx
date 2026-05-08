@@ -3,7 +3,7 @@ import { ProtectedRoute } from "~/components/ProtectedRoute";
 import { AppLayout } from "~/components/AppLayout";
 import { useAuth } from "~/contexts/AuthContext";
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { formatCurrency } from "~/lib/format";
 import {
   BarChart,
@@ -37,17 +37,16 @@ export default function Trends() {
 function TrendsPage() {
   const { getIdToken } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [year, setYear] = useState(new Date().getUTCFullYear());
   const [data, setData] = useState<any>(null);
   const [chartMode, setChartMode] = useState<"stacked" | "grouped">("stacked");
 
-  const fetchTrends = async (y: number) => {
+  const fetchTrends = async () => {
     try {
       setLoading(true);
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const response = await fetch(`/api/trends?year=${y}`, {
+      const response = await fetch("/api/trends", {
         headers: { Authorization: `Bearer ${idToken}` },
       });
 
@@ -62,8 +61,8 @@ function TrendsPage() {
   };
 
   useEffect(() => {
-    fetchTrends(year);
-  }, [year]);
+    fetchTrends();
+  }, []);
 
   // Transform monthly data for stacked bar chart
   const chartData = useMemo(() => {
@@ -133,13 +132,6 @@ function TrendsPage() {
     }));
   }, [data]);
 
-  const formatMonthLabel = (monthStr: string) => {
-    const [y, m] = monthStr.split("-");
-    return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("en-US", {
-      month: "short",
-    });
-  };
-
   if (loading && !data) {
     return (
       <div className="p-4 max-w-7xl mx-auto">
@@ -157,32 +149,12 @@ function TrendsPage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      {/* Header with Year Selector */}
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Trends</h1>
-          <p className="text-sm text-gray-600 mt-0.5">
-            Annual spending patterns
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setYear((y) => y - 1)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-lg font-semibold text-gray-900 tabular-nums w-16 text-center">
-            {year}
-          </span>
-          <button
-            onClick={() => setYear((y) => y + 1)}
-            disabled={year >= new Date().getUTCFullYear()}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+      {/* Header */}
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Trends</h1>
+        <p className="text-sm text-gray-600 mt-0.5">
+          Last 12 months
+        </p>
       </div>
 
       {/* Annual Overview Cards */}
@@ -231,7 +203,7 @@ function TrendsPage() {
                 Monthly Spending
               </h3>
               <p className="text-sm text-gray-600 mt-0.5">
-                By category over the year
+                By category, trailing 12 months
               </p>
             </div>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -402,13 +374,13 @@ function TrendsPage() {
               Category Trends
             </h3>
             <p className="text-sm text-gray-600 mt-0.5">
-              Annual patterns by category
+              Trailing 12-month patterns by category
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {expenseCats.map((cat: any) => (
-              <CategoryTrendCard key={cat.categoryId} cat={cat} year={year} />
+              <CategoryTrendCard key={cat.categoryId} cat={cat} months={data?.months || []} />
             ))}
           </div>
         </div>
@@ -419,10 +391,10 @@ function TrendsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-gray-900">
-              Annualized Budgets
+              12-Month Budgets
             </h3>
             <p className="text-sm text-gray-600 mt-0.5">
-              Monthly budget vs actual yearly spending
+              Monthly budget vs actual trailing 12-month spending
             </p>
           </div>
 
@@ -440,10 +412,10 @@ function TrendsPage() {
                     Mo. Avg
                   </th>
                   <th className="text-right py-2 px-3 text-xs font-medium text-gray-500">
-                    Annual Budget
+                    12-Mo Budget
                   </th>
                   <th className="text-right py-2 px-3 text-xs font-medium text-gray-500">
-                    Annual Spent
+                    12-Mo Spent
                   </th>
                   <th className="text-right py-2 px-3 text-xs font-medium text-gray-500">
                     % Used
@@ -570,10 +542,7 @@ function TrendsPage() {
       {!loading && (!data || data.annualSummary.totalSpent === 0) && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
           <p className="text-gray-600">
-            No transaction data found for {year}.
-          </p>
-          <p className="text-sm text-gray-500 mt-1">
-            Try selecting a different year.
+            No transaction data found for the last 12 months.
           </p>
         </div>
       )}
@@ -582,9 +551,14 @@ function TrendsPage() {
 }
 
 // Category Trend Card component
-function CategoryTrendCard({ cat, year }: { cat: any; year: number }) {
+function CategoryTrendCard({ cat, months }: { cat: any; months: string[] }) {
   const maxAmount = Math.max(...cat.monthlyAmounts, 1);
   const hasAnomaly = cat.anomalies && cat.anomalies.length > 0;
+
+  const monthLabels = months.map((m) => {
+    const [y, mo] = m.split("-");
+    return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("en-US", { month: "narrow" });
+  });
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -615,9 +589,7 @@ function CategoryTrendCard({ cat, year }: { cat: any; year: number }) {
         {cat.monthlyAmounts.map((amount: number, i: number) => {
           const height = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
           const isAnomaly =
-            cat.anomalies?.some(
-              (a: any) => parseInt(a.month.split("-")[1]) - 1 === i,
-            ) || false;
+            cat.anomalies?.some((a: any) => a.month === months[i]) || false;
 
           return (
             <div
@@ -632,7 +604,7 @@ function CategoryTrendCard({ cat, year }: { cat: any; year: number }) {
                     : "#F3F4F6",
                 minHeight: amount > 0 ? "2px" : "1px",
               }}
-              title={`${formatMonthShort(`${year}-${String(i + 1).padStart(2, "0")}`)}: ${formatCurrency(amount)}`}
+              title={`${formatMonthShort(months[i])}: ${formatCurrency(amount)}`}
             />
           );
         })}
@@ -640,22 +612,20 @@ function CategoryTrendCard({ cat, year }: { cat: any; year: number }) {
 
       {/* Month labels */}
       <div className="flex gap-0.5 mb-3">
-        {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"].map(
-          (m, i) => (
-            <span
-              key={i}
-              className="flex-1 text-center text-[9px] text-gray-400"
-            >
-              {m}
-            </span>
-          ),
-        )}
+        {monthLabels.map((m, i) => (
+          <span
+            key={i}
+            className="flex-1 text-center text-[9px] text-gray-400"
+          >
+            {m}
+          </span>
+        ))}
       </div>
 
       {/* Stats */}
       <div className="space-y-1.5">
         <div className="flex justify-between text-xs">
-          <span className="text-gray-500">Annual total</span>
+          <span className="text-gray-500">12-month total</span>
           <span className="font-semibold text-gray-900 tabular-nums">
             {formatCurrency(cat.annualSpent)}
           </span>
@@ -677,7 +647,7 @@ function CategoryTrendCard({ cat, year }: { cat: any; year: number }) {
         {cat.annualBudget && (
           <div className="pt-1.5">
             <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-500">Annual budget</span>
+              <span className="text-gray-500">12-month budget</span>
               <span className="text-gray-700 tabular-nums">
                 {formatCurrency(cat.annualSpent)} / {formatCurrency(cat.annualBudget)}
               </span>
