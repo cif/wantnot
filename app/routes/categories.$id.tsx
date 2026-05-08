@@ -63,6 +63,8 @@ function CategoryDetailPage() {
     }
   };
 
+  const [monthYearOptions, setMonthYearOptions] = useState<string[]>([]);
+
   const fetchTransactions = async () => {
     try {
       const idToken = await getIdToken();
@@ -74,7 +76,6 @@ function CategoryDetailPage() {
 
       if (response.ok) {
         const data = await response.json();
-        // Filter transactions for this category
         const categoryTransactions = data.transactions.filter(
           (txn: any) => txn.categoryId === id
         );
@@ -87,21 +88,29 @@ function CategoryDetailPage() {
     }
   };
 
+  const fetchMonths = async () => {
+    try {
+      const idToken = await getIdToken();
+      if (!idToken) return;
+
+      const response = await fetch('/api/transactions/months', {
+        headers: { 'Authorization': `Bearer ${idToken}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMonthYearOptions(data.months || []);
+      }
+    } catch (error) {
+      console.error('Error fetching months:', error);
+    }
+  };
+
   useEffect(() => {
     fetchCategory();
     fetchTransactions();
+    fetchMonths();
   }, [id]);
-
-  // Generate available month/year options from transactions
-  const monthYearOptions = useMemo(() => {
-    const options = new Set<string>();
-    transactions.forEach(txn => {
-      const date = new Date(txn.date);
-      const monthYear = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-      options.add(monthYear);
-    });
-    return Array.from(options).sort().reverse(); // Most recent first
-  }, [transactions]);
 
   // Set default to most recent month if not set
   useEffect(() => {

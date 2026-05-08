@@ -366,10 +366,8 @@ function TransactionsPage() {
     }
   };
 
-  // State for building month dropdown
-  const [allTransactionsForMonths, setAllTransactionsForMonths] = useState<
-    any[]
-  >([]);
+  // Available months from database
+  const [monthYearOptions, setMonthYearOptions] = useState<string[]>([]);
 
   // Fetch initial data
   const fetchData = async () => {
@@ -377,7 +375,7 @@ function TransactionsPage() {
       const idToken = await getIdToken();
       if (!idToken) return;
 
-      const [categoriesRes, projectsRes, allTransactionsRes] =
+      const [categoriesRes, projectsRes, monthsRes] =
         await Promise.all([
           fetch("/api/categories", {
             headers: { Authorization: `Bearer ${idToken}` },
@@ -385,8 +383,7 @@ function TransactionsPage() {
           fetch("/api/projects", {
             headers: { Authorization: `Bearer ${idToken}` },
           }),
-          // Fetch all recent transactions to populate month dropdown
-          fetch("/api/transactions", {
+          fetch("/api/transactions/months", {
             headers: { Authorization: `Bearer ${idToken}` },
           }),
         ]);
@@ -401,10 +398,9 @@ function TransactionsPage() {
         setProjects(data.projects || []);
       }
 
-      // Store transactions ONLY for building month options, not for display
-      if (allTransactionsRes.ok) {
-        const data = await allTransactionsRes.json();
-        setAllTransactionsForMonths(data.transactions || []);
+      if (monthsRes.ok) {
+        const data = await monthsRes.json();
+        setMonthYearOptions(data.months || []);
       }
 
       // Fetch uncategorized and recurring groups
@@ -419,30 +415,6 @@ function TransactionsPage() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  // Helper function to compute month/year for a transaction
-  const getTransactionMonthYear = (txn: any): string => {
-    // Use manual override if set, otherwise compute from date
-    if (txn.manualMonthYear) {
-      return txn.manualMonthYear;
-    }
-    const date = new Date(txn.date);
-    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-  };
-
-  // Generate available month/year options from both allTransactionsForMonths and allUncategorized
-  const monthYearOptions = useMemo(() => {
-    const options = new Set<string>();
-    // Add months from recent transactions
-    allTransactionsForMonths.forEach((txn) => {
-      options.add(getTransactionMonthYear(txn));
-    });
-    // Also add months from all uncategorized transactions (so older months appear)
-    allUncategorized.forEach((txn) => {
-      options.add(getTransactionMonthYear(txn));
-    });
-    return Array.from(options).sort().reverse(); // Most recent first
-  }, [allTransactionsForMonths, allUncategorized]);
 
   // Set default to most recent month if not set
   useEffect(() => {
