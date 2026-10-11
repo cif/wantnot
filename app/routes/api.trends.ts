@@ -1,7 +1,7 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
 import { db, transactions, categories } from '~/db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 
 export async function loader({ request }: { request: Request }) {
   try {
@@ -42,6 +42,7 @@ export async function loader({ request }: { request: Request }) {
         eq(transactions.isHidden, false),
         eq(transactions.pending, false),
         eq(transactions.isTransfer, false),
+        isNull(transactions.projectId), // project-tagged spend (rental, business) is tracked separately
         sql`COALESCE(${transactions.manualMonthYear}, TO_CHAR(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) IN (${sql.join(allMonths.map(m => sql`${m}`), sql`, `)})`
       ))
       .groupBy(sql`effective_month`, transactions.categoryId);
