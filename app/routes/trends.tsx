@@ -24,6 +24,43 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+// Custom tooltip for the monthly spending chart: month total on top,
+// then per-category rows in small colored text.
+function MonthlySpendingTooltip({ active, payload, label }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const total = payload[0]?.payload?.totalSpent ?? 0;
+  const rows = payload
+    .filter((p: any) => p.value > 0)
+    .sort((a: any, b: any) => b.value - a.value);
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2 min-w-[160px]">
+      <div className="flex items-baseline justify-between gap-4 pb-1.5 mb-1.5 border-b border-gray-100">
+        <span className="text-xs font-medium text-gray-700">{label}</span>
+        <span className="text-sm font-semibold text-gray-900 tabular-nums">
+          {formatCurrency(total)}
+        </span>
+      </div>
+      <div className="space-y-0.5">
+        {rows.map((p: any) => (
+          <div
+            key={p.dataKey}
+            className="flex items-baseline justify-between gap-4 text-[10px] leading-tight"
+          >
+            <span className="truncate" style={{ color: p.color }}>
+              {p.name}
+            </span>
+            <span className="text-gray-600 tabular-nums">
+              {formatCurrency(p.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Trends() {
   return (
     <ProtectedRoute>
@@ -245,17 +282,7 @@ function TrendsPage() {
                 tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
                 width={50}
               />
-              <Tooltip
-                formatter={(value: number, name: string) => [
-                  formatCurrency(value),
-                  name,
-                ]}
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: "1px solid #E5E7EB",
-                  fontSize: "12px",
-                }}
-              />
+              <Tooltip content={<MonthlySpendingTooltip />} />
               <ReferenceLine
                 y={avgMonthlySpending}
                 stroke="#9CA3AF"
