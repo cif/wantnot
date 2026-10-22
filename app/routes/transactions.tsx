@@ -681,6 +681,16 @@ function TransactionsPage() {
 
       if (!response.ok) throw new Error("Failed to sync transactions");
 
+      const data = await response.json();
+      if (data.needsReconnect) {
+        setErrorMessage("Your bank connection needs to be re-authorized. Go to Home and click Reconnect Bank.");
+        setTimeout(() => setErrorMessage(null), 8000);
+        return;
+      }
+      if (data.success === false) {
+        throw new Error("Sync failed for one or more accounts");
+      }
+
       // Refresh data after sync
       await fetchData();
       setSuccessMessage("Transactions synced successfully!");

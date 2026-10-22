@@ -5,9 +5,13 @@ import { useAuth } from '~/contexts/AuthContext';
 interface PlaidLinkButtonProps {
   onSuccess: (publicToken: string, metadata: any) => void;
   onError?: (error: any) => void;
+  /** When set, Link opens in update mode to re-authenticate this account's item */
+  accountId?: string;
+  label?: string;
+  className?: string;
 }
 
-export function PlaidLinkButton({ onSuccess, onError }: PlaidLinkButtonProps) {
+export function PlaidLinkButton({ onSuccess, onError, accountId, label, className }: PlaidLinkButtonProps) {
   const { user, getIdToken } = useAuth();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +33,7 @@ export function PlaidLinkButton({ onSuccess, onError }: PlaidLinkButtonProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`,
         },
+        body: JSON.stringify(accountId ? { accountId } : {}),
       });
 
       if (!response.ok) {
@@ -79,7 +84,7 @@ export function PlaidLinkButton({ onSuccess, onError }: PlaidLinkButtonProps) {
     <button
       onClick={handleClick}
       disabled={loading || !user}
-      className="flex items-center justify-center gap-3 bg-[#41A6AC] text-white px-6 py-3 rounded-lg hover:bg-[#369399] transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      className={className ?? "flex items-center justify-center gap-3 bg-[#41A6AC] text-white px-6 py-3 rounded-lg hover:bg-[#369399] transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"}
     >
       {loading ? (
         <>
@@ -96,7 +101,7 @@ export function PlaidLinkButton({ onSuccess, onError }: PlaidLinkButtonProps) {
               d="M12 6v6m0 0v6m0-6h6m-6 0H6"
             />
           </svg>
-          Connect Bank Account
+          {label ?? 'Connect Bank Account'}
         </>
       )}
     </button>

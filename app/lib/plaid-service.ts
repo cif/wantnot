@@ -19,16 +19,53 @@ export interface CreateAccountParams {
   isoCurrencyCode?: string;
 }
 
+// Plaid error codes that mean the user has to re-authenticate via Link update mode
+const RECONNECT_ERROR_CODES = new Set([
+  'ITEM_LOGIN_REQUIRED',
+  'PENDING_EXPIRATION',
+  'PENDING_DISCONNECT',
+  'USER_PERMISSION_REVOKED',
+  'ACCESS_NOT_GRANTED',
+]);
+
+// Pull Plaid's error_code/error_message out of an axios error, if present
+export function getPlaidError(error: unknown): { code: string | null; message: string | null } {
+  const data = (error as any)?.response?.data;
+  return {
+    code: typeof data?.error_code === 'string' ? data.error_code : null,
+    message: typeof data?.error_message === 'string' ? data.error_message : null,
+  };
+}
+
+// Error thrown by sync/refresh operations that preserves Plaid's error code
+export class PlaidSyncError extends Error {
+  code: string | null;
+  plaidMessage: string | null;
+  needsReconnect: boolean;
+
+  constructor(context: string, cause: unknown) {
+    const { code, message } = getPlaidError(cause);
+    super(code ? `${context}: ${code}` : context);
+    this.name = 'PlaidSyncError';
+    this.code = code;
+    this.plaidMessage = message;
+    this.needsReconnect = code !== null && RECONNECT_ERROR_CODES.has(code);
+  }
+}
+
 export class PlaidService {
-  // Create link token for user
-  static async createLinkToken(userId: string, firebaseUid: string) {
+  // Create link token for user.
+  // When accessToken is provided, the token opens Link in update mode so the
+  // user can re-authenticate an existing item (e.g. after ITEM_LOGIN_REQUIRED).
+  static async createLinkToken(userId: string, firebaseUid: string, accessToken?: string) {
     try {
       const response = await plaidClient.linkTokenCreate({
         user: {
           client_user_id: firebaseUid,
         },
         client_name: 'WantNot',
-        products: [Products.Transactions],
+        // Update mode must not request products; the item already has them
+        ...(accessToken ? { access_token: accessToken } : { products: [Products.Transactions] }),
         country_codes: [CountryCode.Us],
         language: 'en',
         redirect_uri: process.env.PLAID_LINK_REDIRECT,
@@ -36,8 +73,8 @@ export class PlaidService {
 
       return response.data.link_token;
     } catch (error) {
-      console.error('Error creating link token:', error);
-      throw new Error('Failed to create link token');
+      console.error('Error creating link token:', getPlaidError(error), error);
+      throw new PlaidSyncError('Failed to create link token', error);
     }
   }
 
@@ -127,7 +164,11 @@ export class PlaidService {
   }
 
   // Sync transactions for an account using /transactions/sync
-  static async syncTransactions(userId: string, accountId: string, accessToken: string) {
+  static async syncTransactions(
+    userId: string,
+    accountId: string,
+    accessToken: string
+  ): Promise<{ added: number; modified: number; removed: number }> {
     try {
       // Get the account to retrieve the cursor
       const account = await db
@@ -285,8 +326,10 @@ export class PlaidService {
         removed: removedCount,
       };
     } catch (error) {
-      console.error('Error syncing transactions:', error);
-      throw new Error('Failed to sync transactions');
+      // Preserve the Plaid error code from a nested (has_more) call
+      if (error instanceof PlaidSyncError) throw error;
+      console.error('Error syncing transactions:', getPlaidError(error), error);
+      throw new PlaidSyncError('Failed to sync transactions', error);
     }
   }
 

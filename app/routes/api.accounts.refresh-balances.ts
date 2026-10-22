@@ -1,6 +1,6 @@
 import { authenticateRequest } from '~/lib/firebase-admin';
 import { UserService } from '~/lib/user-service';
-import { PlaidService } from '~/lib/plaid-service';
+import { PlaidService, getPlaidError } from '~/lib/plaid-service';
 import { db, accounts } from '~/db';
 import { eq } from 'drizzle-orm';
 
@@ -20,6 +20,7 @@ export async function action({ request }: { request: Request }) {
     let successCount = 0;
     let errorCount = 0;
     const errors: string[] = [];
+    let needsReconnect = false;
 
     // Refresh each account's balance
     for (const account of userAccounts) {
@@ -49,16 +50,19 @@ export async function action({ request }: { request: Request }) {
           errors.push(`Account ${account.name} not found in Plaid response`);
         }
       } catch (accountError) {
-        console.error(`Error refreshing account ${account.id}:`, accountError);
+        const { code } = getPlaidError(accountError);
+        console.error(`Error refreshing account ${account.id}:`, code, accountError);
         errorCount++;
-        errors.push(`Failed to refresh ${account.name}`);
+        if (code === 'ITEM_LOGIN_REQUIRED') needsReconnect = true;
+        errors.push(`Failed to refresh ${account.name}${code ? ` (${code})` : ''}`);
       }
     }
 
     return Response.json({
-      success: true,
+      success: errorCount === 0,
       refreshed: successCount,
       failed: errorCount,
+      needsReconnect,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

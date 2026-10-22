@@ -1,4 +1,4 @@
-import { PlaidService } from '~/lib/plaid-service';
+import { PlaidService, PlaidSyncError } from '~/lib/plaid-service';
 import { UserService } from '~/lib/user-service';
 import { db, accounts } from '~/db';
 import { eq } from 'drizzle-orm';
@@ -61,18 +61,30 @@ export async function action({ request }: { request: Request }) {
         });
       } catch (error) {
         console.error(`Error syncing account ${account.id}:`, error);
+        const plaidError = error instanceof PlaidSyncError ? error : null;
         results.push({
           accountId: account.id,
           accountName: account.name,
           error: 'Failed to sync',
+          errorCode: plaidError?.code ?? null,
+          errorMessage: plaidError?.plaidMessage ?? null,
+          needsReconnect: plaidError?.needsReconnect ?? false,
         });
       }
     }
 
+    const failed = results.filter((r: any) => r.error);
+    const reconnect = results.find((r: any) => r.needsReconnect);
+
     return Response.json({
-      success: true,
+      success: failed.length === 0,
       results,
       totalAccounts: accountsToSync.length,
+      syncedAccounts: results.length - failed.length,
+      // Any account on the expired item can be used to open Link in update mode
+      needsReconnect: Boolean(reconnect),
+      reconnectAccountId: reconnect?.accountId ?? null,
+      reconnectAccountNames: results.filter((r: any) => r.needsReconnect).map((r: any) => r.accountName),
     });
   } catch (error) {
     console.error('Error in sync-transactions:', error);

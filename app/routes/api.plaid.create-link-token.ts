@@ -1,6 +1,7 @@
 import { PlaidService } from '~/lib/plaid-service';
 import { UserService } from '~/lib/user-service';
-import { db, users } from '~/db';
+import { db, users, accounts } from '~/db';
+import { eq } from 'drizzle-orm';
 import { authenticateRequest } from '~/lib/firebase-admin';
 
 export async function action({ request }: { request: Request }) {
@@ -25,10 +26,36 @@ export async function action({ request }: { request: Request }) {
       user = newUser[0];
     }
 
-    // Create link token
-    const linkToken = await PlaidService.createLinkToken(user.id, firebaseUser.uid);
+    // Optional accountId => open Link in update mode for that account's item
+    let accessToken: string | undefined;
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // No body is fine; that's a normal "connect new bank" request
+    }
 
-    return Response.json({ link_token: linkToken });
+    if (body?.accountId) {
+      const account = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, body.accountId))
+        .limit(1);
+
+      if (account.length === 0 || account[0].userId !== user.id) {
+        return Response.json(
+          { error: 'Account not found or unauthorized' },
+          { status: 404 }
+        );
+      }
+
+      accessToken = account[0].accessToken;
+    }
+
+    // Create link token
+    const linkToken = await PlaidService.createLinkToken(user.id, firebaseUser.uid, accessToken);
+
+    return Response.json({ link_token: linkToken, updateMode: Boolean(accessToken) });
   } catch (error) {
     console.error('Error in create-link-token:', error);
     return Response.json(

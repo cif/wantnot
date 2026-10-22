@@ -38,6 +38,8 @@ function AuthenticatedHome() {
   const [budgetSummary, setBudgetSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Set when Plaid reports the bank item needs re-authentication (ITEM_LOGIN_REQUIRED)
+  const [reconnect, setReconnect] = useState<{ accountId: string; accountNames: string[] } | null>(null);
   const [categorizingId, setCategorizingId] = useState<string | null>(null);
   const [taggingProjectId, setTaggingProjectId] = useState<string | null>(null);
 
@@ -185,10 +187,25 @@ function AuthenticatedHome() {
       const transactionsData = await transactionsRes.json();
       const balancesData = balancesRes.ok ? await balancesRes.json() : null;
 
-      setSuccessMessage(
-        `Synced transactions for ${transactionsData.totalAccounts} account(s)` +
-        (balancesData ? ` and refreshed ${balancesData.refreshed} balance(s)` : '')
-      );
+      if (transactionsData.needsReconnect) {
+        setReconnect({
+          accountId: transactionsData.reconnectAccountId,
+          accountNames: transactionsData.reconnectAccountNames ?? [],
+        });
+        setErrorMessage(null);
+        setSuccessMessage(null);
+      } else if (transactionsData.success === false) {
+        const failed = (transactionsData.results ?? []).filter((r: any) => r.error);
+        setErrorMessage(
+          `Sync failed for ${failed.map((r: any) => `${r.accountName}${r.errorCode ? ` (${r.errorCode})` : ''}`).join(', ')}`
+        );
+      } else {
+        setReconnect(null);
+        setSuccessMessage(
+          `Synced transactions for ${transactionsData.syncedAccounts ?? transactionsData.totalAccounts} account(s)` +
+          (balancesData ? ` and refreshed ${balancesData.refreshed} balance(s)` : '')
+        );
+      }
 
       // Refresh the data
       await fetchData();
@@ -242,6 +259,13 @@ function AuthenticatedHome() {
       console.error('Error exchanging token:', error);
       setErrorMessage('Failed to connect bank account. Please try again.');
     }
+  };
+
+  // Link update mode succeeded: the existing access token is valid again, no exchange needed
+  const handleReconnectSuccess = async () => {
+    setReconnect(null);
+    setSuccessMessage('Bank reconnected. Syncing transactions...');
+    await handleRefreshTransactions();
   };
 
   const handlePlaidError = (error: any) => {
@@ -330,6 +354,26 @@ function AuthenticatedHome() {
       {errorMessage && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
           {errorMessage}
+        </div>
+      )}
+
+      {reconnect && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-amber-900">
+            <p className="font-medium">Your bank connection needs to be re-authorized.</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              The bank asked for a fresh login, so syncing has stopped for{' '}
+              {reconnect.accountNames.length > 0 ? reconnect.accountNames.join(', ') : 'your accounts'}.
+              Reconnect to resume syncing; your transactions and categories are kept.
+            </p>
+          </div>
+          <PlaidLinkButton
+            accountId={reconnect.accountId}
+            label="Reconnect Bank"
+            onSuccess={handleReconnectSuccess}
+            onError={handlePlaidError}
+            className="flex items-center justify-center gap-2 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          />
         </div>
       )}
 
