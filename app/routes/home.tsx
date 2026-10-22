@@ -201,9 +201,11 @@ function AuthenticatedHome() {
         );
       } else {
         setReconnect(null);
+        const added = (transactionsData.results ?? []).reduce((n: number, r: any) => n + (r.added ?? 0), 0);
+        const modified = (transactionsData.results ?? []).reduce((n: number, r: any) => n + (r.modified ?? 0), 0);
         setSuccessMessage(
-          `Synced transactions for ${transactionsData.syncedAccounts ?? transactionsData.totalAccounts} account(s)` +
-          (balancesData ? ` and refreshed ${balancesData.refreshed} balance(s)` : '')
+          `Synced ${added} new and ${modified} updated transaction(s)` +
+          (balancesData ? `, refreshed ${balancesData.refreshed} balance(s)` : '')
         );
       }
 

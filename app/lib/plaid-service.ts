@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { plaidClient } from './plaid';
 import { db, accounts, transactions } from '~/db';
 import { CountryCode, Products } from 'plaid';
@@ -183,6 +183,15 @@ export class PlaidService {
 
       const cursor = account[0].transactionsCursor || undefined;
 
+      // /transactions/sync returns every account on the Item, so map each
+      // transaction to its own account row instead of the caller's account.
+      const itemAccounts = await db
+        .select({ id: accounts.id, plaidAccountId: accounts.plaidAccountId })
+        .from(accounts)
+        .where(and(eq(accounts.userId, userId), eq(accounts.plaidItemId, account[0].plaidItemId)));
+      const accountIdByPlaidId = new Map(itemAccounts.map(a => [a.plaidAccountId, a.id]));
+      const resolveAccountId = (plaidAccountId: string) => accountIdByPlaidId.get(plaidAccountId) ?? accountId;
+
       // Use /transactions/sync instead of /transactions/get
       const response = await plaidClient.transactionsSync({
         access_token: accessToken,
@@ -212,6 +221,7 @@ export class PlaidService {
               await db
                 .update(transactions)
                 .set({
+                  accountId: resolveAccountId(txn.account_id),
                   plaidTransactionId: txn.transaction_id,
                   pendingTransactionId: txn.pending_transaction_id,
                   amount: txn.amount.toString(),
@@ -236,7 +246,7 @@ export class PlaidService {
             .insert(transactions)
             .values({
               userId,
-              accountId,
+              accountId: resolveAccountId(txn.account_id),
               plaidTransactionId: txn.transaction_id,
               pendingTransactionId: txn.pending_transaction_id || undefined,
               amount: txn.amount.toString(),
@@ -266,6 +276,7 @@ export class PlaidService {
           await db
             .update(transactions)
             .set({
+              accountId: resolveAccountId(txn.account_id),
               amount: txn.amount.toString(),
               name: txn.name,
               merchantName: txn.merchant_name || null,
@@ -301,14 +312,14 @@ export class PlaidService {
         }
       }
 
-      // Update the cursor for this account
+      // The cursor belongs to the Item, so store it on every account row that shares it
       await db
         .update(accounts)
         .set({
           transactionsCursor: next_cursor,
           updatedAt: new Date(),
         })
-        .where(eq(accounts.id, accountId));
+        .where(and(eq(accounts.userId, userId), eq(accounts.plaidItemId, account[0].plaidItemId)));
 
       // If there are more transactions, recursively sync again
       if (has_more) {

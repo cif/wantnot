@@ -41,7 +41,14 @@ export async function action({ request }: { request: Request }) {
 
       accountsToSync = account;
     } else {
-      accountsToSync = await PlaidService.getUserAccounts(user.id);
+      // One sync per Plaid Item: /transactions/sync covers every account on the Item
+      const all = await PlaidService.getUserAccounts(user.id);
+      const seenItems = new Set<string>();
+      accountsToSync = all.filter((a) => {
+        if (seenItems.has(a.plaidItemId)) return false;
+        seenItems.add(a.plaidItemId);
+        return true;
+      });
     }
 
     // Sync transactions for each account
