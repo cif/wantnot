@@ -29,6 +29,7 @@ export default [
   route("api/categories/:id", "routes/api.categories.$id.ts"),
   route("api/trends", "routes/api.trends.ts"),
   route("api/budget/summary", "routes/api.budget.summary.ts"),
+  route("api/cron/sync", "routes/api.cron.sync.ts"),
   route("api/projects", "routes/api.projects.ts"),
   route("api/projects/:id", "routes/api.projects.$id.ts"),
   route("api/projects/:id/transactions", "routes/api.projects.$id.transactions.ts"),

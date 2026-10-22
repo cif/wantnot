@@ -46,6 +46,15 @@ export const categories = pgTable('categories', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Daily balance snapshots taken by the cron sync, used for trend alerts
+export const accountBalanceSnapshots = pgTable('account_balance_snapshots', {
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  accountId: uuid('account_id').references(() => accounts.id).notNull(),
+  currentBalance: decimal('current_balance', { precision: 12, scale: 2 }),
+  availableBalance: decimal('available_balance', { precision: 12, scale: 2 }),
+  takenAt: timestamp('taken_at').defaultNow().notNull(),
+});
+
 // Projects for grouping transactions (e.g., client work, business ventures)
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),

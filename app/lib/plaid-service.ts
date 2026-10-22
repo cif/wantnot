@@ -53,6 +53,20 @@ export class PlaidSyncError extends Error {
   }
 }
 
+// Bank-internal movements (credit card payments, loan payments) are hidden at sync time so they
+// never count as spending. Matches Bank of America's naming on both sides of a payment.
+const INTERNAL_PAYMENT_PATTERNS = [
+  /payment to CRD \d{4}/i,          // checking side: "Online Banking payment to CRD 3757"
+  /payment to CFG \d{4}/i,          // checking side: loan payment
+  /^PAYMENT FROM CHK \d{4}/i,       // card side
+  /^PAYMENT TO ACCT #\d{4}/i,       // checking side, newer format
+  /^PENDING PAYMENT$/i,             // card side, newer format
+  /PAYMENT - THANK YOU/i,
+];
+export function isInternalPayment(name: string): boolean {
+  return INTERNAL_PAYMENT_PATTERNS.some((re) => re.test(name));
+}
+
 export class PlaidService {
   // Create link token for user.
   // When accessToken is provided, the token opens Link in update mode so the
@@ -258,6 +272,7 @@ export class PlaidService {
               pending: txn.pending,
               plaidCategory: txn.category || null,
               plaidCategoryId: txn.category_id || null,
+              ...(isInternalPayment(txn.name) ? { isHidden: true, notes: 'Auto-hidden: card or loan payment' } : {}),
             })
             .onConflictDoNothing({ target: transactions.plaidTransactionId })
             .returning();
